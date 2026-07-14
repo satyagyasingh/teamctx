@@ -1,5 +1,34 @@
 {
   "id": "main",
   "name": "teamctx-dev",
-  "whys": []
+  "whys": [
+    {
+      "id": "9aztalvt",
+      "text": "Preserve team context across AI tools and roles",
+      "sourceContributionIds": [
+        "c-1784049176203-6hzf3"
+      ],
+      "summary": "Teams lose shared context as work spans multiple AI tools and shifting roles.",
+      "whats": [
+        {
+          "id": "amkj3vlj",
+          "text": "Manager approval workflows",
+          "sourceContributionIds": [
+            "c-1784049176203-6hzf3"
+          ],
+          "summary": "First-priority surface for capturing and gating context changes through managers.",
+          "hows": [
+            {
+              "id": "w3vhcz58",
+              "text": "Design approval flow for context changes reviewed by managers",
+              "sourceContributionIds": [
+                "c-1784049176203-6hzf3"
+              ],
+              "summary": "Define states, reviewers, and transitions for manager-gated context updates."
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
