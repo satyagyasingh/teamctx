@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   items archived under `.teamctx/rejected/` with an optional reason.
   `teamctx config manager <name>` sets an identity gate (unset = solo mode).
   New `--apply` flag on `contribute` preserves the old immediate-apply behaviour.
+- Context snapshots: `teamctx snapshot create / list / show / approve / reject /
+  current` — freeze the whole shared context as a versioned checkpoint that the
+  manager signs off on. Snapshots live under `.teamctx/snapshots/` with a
+  `current.json` pointer to the last approved state. Git-style ID prefixes
+  supported on all id-taking commands. Reuses the manager identity gate.
 
 ### Changed
 - `teamctx contribute` no longer applies to shared context on submission by
