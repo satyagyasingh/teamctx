@@ -3,7 +3,7 @@
   "createdAt": "2026-07-14T17:13:24.691Z",
   "createdBy": "satyagya",
   "message": "Pre lauch freeze",
-  "status": "pending",
+  "status": "approved",
   "shared": {
     "id": "main",
     "name": "teamctx-dev",
@@ -38,8 +38,8 @@
       }
     ]
   },
-  "approvedAt": null,
-  "approvedBy": null,
+  "approvedAt": "2026-07-14T17:16:24.315Z",
+  "approvedBy": "satyagya",
   "rejectedAt": null,
   "rejectedBy": null,
   "reason": null
