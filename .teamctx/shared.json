@@ -25,6 +25,32 @@
                 "c-1784049176203-6hzf3"
               ],
               "summary": "Define states, reviewers, and transitions for manager-gated context updates."
+            },
+            {
+              "id": "3q53ubom",
+              "text": "Build manager approval queue for pending context changes",
+              "sourceContributionIds": [
+                "c-1784049462066-g4vzu"
+              ],
+              "summary": "Create approval queue UI/backend"
+            }
+          ]
+        },
+        {
+          "id": "qkahlee3",
+          "text": "Context snapshots",
+          "sourceContributionIds": [
+            "c-1784049462066-g4vzu"
+          ],
+          "summary": "Capture point-in-time team context snapshots",
+          "hows": [
+            {
+              "id": "gu7po82i",
+              "text": "Implement snapshot capture and retrieval for team context state",
+              "sourceContributionIds": [
+                "c-1784049462066-g4vzu"
+              ],
+              "summary": "Build snapshot capture/retrieval"
             }
           ]
         }
