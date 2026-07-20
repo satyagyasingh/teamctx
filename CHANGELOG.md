@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Self-hosting guide (`docs/self-hosting.md`): full end-to-end walkthrough with
+  a "what runs where" diagram, per-step verification commands, and a
+  troubleshooting section grounded in the real failure modes of the
+  `api/context`, `api/contribute`, and `api/ask` handlers. The README's
+  self-hosting section is trimmed to a short summary that links to the guide.
+
 ## [0.2.0] - 2026-07-21
 
 ### Added
