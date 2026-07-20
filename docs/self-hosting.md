@@ -67,11 +67,20 @@ them.
 - **Anthropic API key** — [console.anthropic.com](https://console.anthropic.com).
 - **GitHub account** — free plan is fine; private repos are unlimited.
 
+> **Why we clone the source instead of `npm install -g teamctx`.** teamctx is
+> published on npm and if you only want the CLI locally that's all you need
+> (`npm install -g teamctx` or `npx teamctx init`). But self-hosting also
+> deploys the **web layer** — the handlers in `api/` and `vercel.json` — and
+> those files need to live in the same repo Vercel deploys. The npm package
+> only ships the CLI, not the web layer, so for self-hosting we clone the
+> source into your private repo and get the CLI as a bonus via
+> `npm install -g .` from the same checkout.
+
 ---
 
 ## Setup
 
-### 1. Create a private GitHub repo
+### 1. Create a private GitHub repo and clone teamctx into it
 
 Go to [github.com/new](https://github.com/new) and create a new **private**
 repository (name it something like `team-context`). Leave "Add a README" and
@@ -89,13 +98,16 @@ git push -u origin main
 Replace `YOUR_USERNAME/team-context` with your actual username and repo name.
 
 **Verify:** open your private repo on GitHub — you should see the teamctx
-source code and a `main` branch.
+source code (including the `api/` directory and `vercel.json`) and a `main`
+branch.
 
-### 2. Install and configure locally
+### 2. Install dependencies and add your API key
+
+From inside the cloned directory:
 
 ```bash
-npm install
-npm install -g .          # makes `teamctx` available in your shell
+npm install               # installs runtime dependencies
+npm install -g .          # makes the `teamctx` command available in your shell
 ```
 
 Add your Anthropic API key to a `.env.local` file (replace the placeholder):
