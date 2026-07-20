@@ -211,7 +211,7 @@ See [`docs/mcp.md`](docs/mcp.md) for the full reference.
 
 ## Self-hosting (web layer)
 
-Deploy to Vercel to give non-technical team members two routes:
+Optional. Deploy to Vercel to give non-technical team members three routes:
 
 - **`/context/<role>`** — downloads their role context file
 - **`/contribute`** — a plain HTML form to submit updates
@@ -219,95 +219,8 @@ Deploy to Vercel to give non-technical team members two routes:
 
 Manager runs `teamctx pull` to process web submissions.
 
-### Setup
-
-**Prerequisites:** Node 18+, git, [Vercel CLI](https://vercel.com/docs/cli), Anthropic API key, GitHub account.
-
-**1. Create a private GitHub repo**
-
-Go to [github.com/new](https://github.com/new) and create a new **private** repository (e.g. `team-context`). Leave "Add a README" and "Add .gitignore" unchecked — the repo must be empty.
-
-Then clone teamctx and point it at your new private repo:
-
-```bash
-git clone https://github.com/StatsLateral/teamctx team-context
-cd team-context
-git remote set-url origin https://github.com/YOUR_USERNAME/team-context
-git push -u origin main
-```
-
-Replace `YOUR_USERNAME/team-context` with your actual GitHub username and repo name.
-
-**2. Install and configure locally**
-
-```bash
-npm install
-npm install -g .          # makes `teamctx` available in your shell
-```
-
-Add your Anthropic API key ([get one here](https://console.anthropic.com)) by running this in your terminal — replace the placeholder with your real key:
-
-```bash
-echo "ANTHROPIC_API_KEY=sk-ant-your-key-here" > .env.local
-```
-
-This file is gitignored and stays on your machine only.
-
-**3. Initialize teamctx**
-
-```bash
-teamctx init
-# Prompts: project name, your name, model, auto-push, Vercel URL (leave blank for now)
-```
-
-This creates `.teamctx/` and commits it to your private repo.
-
-**4. Deploy to Vercel**
-
-Connect your private repo to a new Vercel project:
-
-```bash
-vercel link      # follow prompts — create a new project linked to your private repo
-```
-
-Set the required env var:
-
-```bash
-vercel env add ANTHROPIC_API_KEY production
-```
-
-Deploy:
-
-```bash
-vercel --prod
-```
-
-Copy the production URL (e.g. `https://team-context-xyz.vercel.app`).
-
-**5. Update your config with the deploy URL**
-
-```bash
-teamctx config deploy-url https://team-context-xyz.vercel.app
-```
-
-**6. Enable web contributions** (optional — only needed for `/contribute` and `teamctx pull`)
-
-The contribution form writes directly to your private GitHub repo. Add two env vars to your Vercel project:
-
-```bash
-vercel env add GITHUB_TOKEN production   # fine-grained PAT, Contents: read+write on your private repo
-vercel env add GITHUB_REPO production    # e.g. StatsLateral/myaccount
-```
-
-Then pull them to your local `.env.local` so `teamctx pull` can read them:
-
-```bash
-vercel env pull .env.local
-```
-
-### Keeping context current
-
-Every `teamctx contribute` commits and pushes to your private repo. Vercel's git integration auto-deploys on push — role files at `/context/<role>` are always up to date within seconds.
+**See the full [self-hosting guide](docs/self-hosting.md)** for step-by-step
+setup, verification checks, and troubleshooting.
 
 ### Security model
 
