@@ -77,20 +77,27 @@ function contributionIndex(contributions) {
   return map;
 }
 
-export function collectContributorCounts(workstream, contributions) {
+export function collectContributorCounts(workstream, contributions, { citedIds } = {}) {
   const byId = contributionIndex(contributions);
-  const counts = new Map();
+  const cited = citedIds instanceof Set ? citedIds : (Array.isArray(citedIds) ? new Set(citedIds) : null);
+  const seenPerAuthor = new Map();
   walkNodes(workstream, node => {
     for (const id of node.sourceContributionIds || []) {
+      if (cited && !cited.has(id)) continue;
       const c = byId.get(id);
       if (!c || !c.author) continue;
-      const entry = counts.get(c.author) || { author: c.author, total: 0, decisions: 0 };
-      entry.total += 1;
-      if (c.tagged === 'decision') entry.decisions += 1;
-      counts.set(c.author, entry);
+      let set = seenPerAuthor.get(c.author);
+      if (!set) { set = new Set(); seenPerAuthor.set(c.author, set); }
+      set.add(id);
     }
   });
-  return [...counts.values()].sort((a, b) => b.total - a.total || a.author.localeCompare(b.author));
+  const counts = [];
+  for (const [author, ids] of seenPerAuthor) {
+    let decisions = 0;
+    for (const id of ids) if (byId.get(id)?.tagged === 'decision') decisions += 1;
+    counts.push({ author, total: ids.size, decisions });
+  }
+  return counts.sort((a, b) => b.total - a.total || a.author.localeCompare(b.author));
 }
 
 export function collectSourceRefs(workstream, contributions) {

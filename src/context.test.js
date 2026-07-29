@@ -245,30 +245,87 @@ describe('answerQuestion', () => {
     expect(call.prompt).not.toContain('Your Role Context');
   });
 
-  it('appends a one-line contributor footer by default when workstream + contributions are given', async () => {
+  it('renders a footer only for contributors the AI actually cited, capped at top 5', async () => {
+    callClaude.mockResolvedValue('the answer\n\n## Citations: c1');
+    const ws = { id: 'main', name: 'M', whys: [
+      { id: 'w1', text: 't', sourceContributionIds: ['c1'], whats: [] },
+      { id: 'w2', text: 'u', sourceContributionIds: ['c2'], whats: [] },
+    ]};
+    const contributions = [
+      { id: 'c1', author: 'alice', ts: '2026-06-01', source: 'cli', tagged: null, text: 'x' },
+      { id: 'c2', author: 'bob',   ts: '2026-06-02', source: 'cli', tagged: null, text: 'y' },
+    ];
+    const result = await answerQuestion({ sharedMd: '# s', roleMd: '', question: 'q', config: { model: 'm' }, workstream: ws, contributions });
+    expect(result).toContain('the answer');
+    expect(result).toContain('**Contributions from:** alice (1)');
+    expect(result).not.toContain('bob');
+    expect(result).not.toContain('## Citations');
+  });
+
+  it('caps default contributor line at 5 when the AI cites many', async () => {
+    const cited = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'];
+    callClaude.mockResolvedValue(`the answer\n\n## Citations: ${cited.join(', ')}`);
+    const ws = { id: 'main', name: 'M', whys: cited.map((id, i) => ({
+      id: `w${i}`, text: 't', sourceContributionIds: [id], whats: [],
+    }))};
+    const contributions = cited.map((id, i) => ({
+      id, author: `author${i}`, ts: '2026-06-01', source: 'cli', tagged: null, text: 't',
+    }));
+    const result = await answerQuestion({ sharedMd: '# s', roleMd: '', question: 'q', config: { model: 'm' }, workstream: ws, contributions });
+    for (const a of ['author0', 'author1', 'author2', 'author3', 'author4']) expect(result).toContain(a);
+    expect(result).not.toContain('author5');
+    expect(result).not.toContain('author6');
+  });
+
+  it('audit block shows only cited sources, not the whole workstream', async () => {
+    callClaude.mockResolvedValue('the answer\n\n## Citations: c1');
+    const ws = { id: 'main', name: 'M', whys: [
+      { id: 'w1', text: 't', sourceContributionIds: ['c1'], whats: [] },
+      { id: 'w2', text: 'u', sourceContributionIds: ['c2'], whats: [] },
+    ]};
+    const contributions = [
+      { id: 'c1', author: 'alice', ts: '2026-06-01', source: 'cli', tagged: 'decision', text: 'pause google ads' },
+      { id: 'c2', author: 'bob',   ts: '2026-06-02', source: 'cli', tagged: null, text: 'unrelated' },
+    ];
+    const result = await answerQuestion({ sharedMd: '# s', roleMd: '', question: 'q', config: { model: 'm' }, workstream: ws, contributions, audit: true });
+    expect(result).toContain('**Sources**');
+    expect(result).toContain('**decision** — alice');
+    expect(result).not.toContain('unrelated');
+    expect(result).not.toContain('bob');
+  });
+
+  it('no footer when the AI cites nothing (## Citations: none)', async () => {
+    callClaude.mockResolvedValue('the answer\n\n## Citations: none');
+    const ws = { id: 'main', name: 'M', whys: [{ id: 'w1', text: 't', sourceContributionIds: ['c1'], whats: [] }] };
+    const contributions = [{ id: 'c1', author: 'alice', ts: '2026-06-01', source: 'cli', tagged: null, text: 'x' }];
+    const result = await answerQuestion({ sharedMd: '# s', roleMd: '', question: 'q', config: { model: 'm' }, workstream: ws, contributions });
+    expect(result.trimEnd()).toBe('the answer');
+  });
+
+  it('no footer when the AI forgets the Citations block entirely', async () => {
     callClaude.mockResolvedValue('the answer');
     const ws = { id: 'main', name: 'M', whys: [{ id: 'w1', text: 't', sourceContributionIds: ['c1'], whats: [] }] };
     const contributions = [{ id: 'c1', author: 'alice', ts: '2026-06-01', source: 'cli', tagged: null, text: 'x' }];
     const result = await answerQuestion({ sharedMd: '# s', roleMd: '', question: 'q', config: { model: 'm' }, workstream: ws, contributions });
-    expect(result).toContain('the answer');
-    expect(result).toContain('**Contributions from:** alice (1)');
-    expect(result).not.toContain('**Sources**');
-  });
-
-  it('appends the detailed audit block when audit=true', async () => {
-    callClaude.mockResolvedValue('the answer');
-    const ws = { id: 'main', name: 'M', whys: [{ id: 'w1', text: 't', sourceContributionIds: ['c1'], whats: [] }] };
-    const contributions = [{ id: 'c1', author: 'alice', ts: '2026-06-01', source: 'cli', tagged: 'decision', text: 'pause google ads' }];
-    const result = await answerQuestion({ sharedMd: '# s', roleMd: '', question: 'q', config: { model: 'm' }, workstream: ws, contributions, audit: true });
-    expect(result).toContain('the answer');
-    expect(result).toContain('**Sources**');
-    expect(result).toContain('**decision** — alice, 2026-06-01 (cli) — pause google ads');
-  });
-
-  it('does not add a footer when the workstream has no sources', async () => {
-    callClaude.mockResolvedValue('the answer');
-    const ws = { id: 'main', name: 'M', whys: [] };
-    const result = await answerQuestion({ sharedMd: '# s', roleMd: '', question: 'q', config: { model: 'm' }, workstream: ws, contributions: [] });
     expect(result).toBe('the answer');
+  });
+
+  it('injects inline [sources: ...] tags into the prompt tree', async () => {
+    callClaude.mockResolvedValue('answer\n\n## Citations: none');
+    const ws = { id: 'main', name: 'M', whys: [
+      { id: 'w1', text: 'grow', sourceContributionIds: ['c1'], whats: [
+        { id: 'wt1', text: 'linkedin', sourceContributionIds: ['c2'], hows: [] },
+      ]},
+    ]};
+    await answerQuestion({
+      sharedMd: '# s', roleMd: '', question: 'q?', config: { model: 'm' },
+      workstream: ws, contributions: [
+        { id: 'c1', author: 'a', ts: '', source: 'cli', tagged: null, text: 'x' },
+        { id: 'c2', author: 'b', ts: '', source: 'cli', tagged: null, text: 'y' },
+      ],
+    });
+    const promptSent = callClaude.mock.calls[0][0].prompt;
+    expect(promptSent).toContain('[sources: c1]');
+    expect(promptSent).toContain('[sources: c2]');
   });
 });

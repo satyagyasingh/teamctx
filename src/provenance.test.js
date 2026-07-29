@@ -61,7 +61,7 @@ describe('collectContributorCounts', () => {
   it('counts distinct contributions per author, marks decisions, sorts by total desc', () => {
     const counts = collectContributorCounts(workstream, contributions);
     expect(counts).toEqual([
-      { author: 'priya', total: 3, decisions: 1 },
+      { author: 'priya', total: 2, decisions: 1 },
       { author: 'rajeev', total: 1, decisions: 0 },
       { author: 'shikhin', total: 1, decisions: 0 },
     ]);
@@ -99,7 +99,7 @@ describe('collectSourceRefs', () => {
 describe('formatContributorLine', () => {
   it('renders "author (N, K decisions)" with comma joins, most active first', () => {
     const counts = collectContributorCounts(workstream, contributions);
-    expect(formatContributorLine(counts)).toBe('**Contributions from:** priya (3, 1 decision), rajeev (1), shikhin (1)');
+    expect(formatContributorLine(counts)).toBe('**Contributions from:** priya (2, 1 decision), rajeev (1), shikhin (1)');
   });
 
   it('returns empty string when no counts', () => {
@@ -112,7 +112,7 @@ describe('formatContributorsSection', () => {
     const counts = collectContributorCounts(workstream, contributions);
     const out = formatContributorsSection(counts);
     expect(out).toContain('## Contributors');
-    expect(out).toContain('- **priya** — 3 contributions (1 decision)');
+    expect(out).toContain('- **priya** — 2 contributions (1 decision)');
     expect(out).toContain('- **shikhin** — 1 contribution');
   });
 

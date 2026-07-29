@@ -21,7 +21,12 @@ function decisionMarker(node, contributionsById) {
   return `  *[decision — ${author}, ${date}, via ${source}]*`;
 }
 
-export function serializeToMd(workstream, projectName, lastUpdatedBy = '', contributions = []) {
+function sourceTag(node) {
+  const ids = node.sourceContributionIds || [];
+  return ids.length ? `  [sources: ${ids.join(', ')}]` : '';
+}
+
+export function serializeToMd(workstream, projectName, lastUpdatedBy = '', contributions = [], { includeSourceTags = false } = {}) {
   const now = new Date().toISOString().split('T')[0];
   const byLine = lastUpdatedBy ? ` · Source: ${lastUpdatedBy} contribution` : '';
   const header = `# Project Context — ${projectName}\n*Last updated: ${now}${byLine}*\n\n## Why / What / How\n\n`;
@@ -31,18 +36,20 @@ export function serializeToMd(workstream, projectName, lastUpdatedBy = '', contr
   }
 
   const contributionsById = new Map(contributions.map(c => [c.id, c]));
+  const tagFor = includeSourceTags ? sourceTag : () => '';
 
   const tree = workstream.whys.map(why => {
-    let out = `- **Why:** ${why.text}${decisionMarker(why, contributionsById)}\n`;
+    let out = `- **Why:** ${why.text}${decisionMarker(why, contributionsById)}${tagFor(why)}\n`;
     (why.whats || []).forEach(what => {
-      out += `  - **What:** ${what.text}${decisionMarker(what, contributionsById)}\n`;
+      out += `  - **What:** ${what.text}${decisionMarker(what, contributionsById)}${tagFor(what)}\n`;
       (what.hows || []).forEach(how => {
-        out += `    - **How:** ${how.text}${decisionMarker(how, contributionsById)}\n`;
+        out += `    - **How:** ${how.text}${decisionMarker(how, contributionsById)}${tagFor(how)}\n`;
       });
     });
     return out;
   }).join('');
 
+  if (includeSourceTags) return header + tree;
   const contributorsSection = formatContributorsSection(collectContributorCounts(workstream, contributions));
   return header + tree + (contributorsSection ? `\n${contributorsSection}` : '');
 }
@@ -192,28 +199,62 @@ export function normalizeSubworkstreamProposal(parsed, whys) {
   return { splits, leftover };
 }
 
+const CITATIONS_HEADING = /\n{1,2}##\s*Citations\s*:?\s*/i;
+const CITATION_INSTRUCTION = 'The tree in the context is annotated with inline "[sources: c-x, c-y]" tags on each node. Do NOT include those "[sources: ...]" tags in your answer text — they are metadata for you, not the reader. Instead, at the very end of your answer, on its own line, output exactly "## Citations: id1, id2, id3" listing the contribution ids whose text materially informed your answer, most-important first. If none apply, output "## Citations: none".';
+
+function parseCitations(answer) {
+  if (!answer) return { body: answer, citedIds: [] };
+  const match = answer.match(CITATIONS_HEADING);
+  if (!match) return { body: answer, citedIds: [] };
+  const idx = match.index;
+  const body = answer.slice(0, idx).trimEnd();
+  const tail = answer.slice(idx + match[0].length).trim();
+  if (!tail || /^none$/i.test(tail)) return { body, citedIds: [] };
+  const citedIds = tail.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+  return { body, citedIds };
+}
+
 export async function answerQuestion({ sharedMd, roleMd, question, config, workstream, contributions, audit }) {
+  const contribs = contributions || [];
+  const useCitedTags = !!workstream;
+  const shared = useCitedTags
+    ? serializeToMd(workstream, workstream.name || config?.project || 'project', '', contribs, { includeSourceTags: true })
+    : sharedMd;
+
   const context = [
     roleMd ? `## Your Role Context\n\n${roleMd}` : '',
-    sharedMd ? `## Shared Project Context\n\n${sharedMd}` : '',
+    shared ? `## Shared Project Context\n\n${shared}` : '',
   ].filter(Boolean).join('\n\n---\n\n');
 
   const system = [
     'You are a helpful assistant with access to the team\'s project context.',
     'Answer questions based on the context provided. Be concise and specific.',
     'When the context shows an inline "*[decision — author, date, via source]*" marker on a statement, treat that statement as a canonical human decision. If your answer relies on it, cite it inline like "(decision — author, date)". If the context contains conflicting statements and one is a decision, prefer the decision.',
-  ].join(' ');
+    useCitedTags ? CITATION_INSTRUCTION : '',
+  ].filter(Boolean).join(' ');
   const prompt = `Context:\n\n${context}\n\n---\n\nQuestion: ${question}`;
 
-  const answer = await callClaude({ prompt, model: config.model, system, config });
-  const footer = buildAnswerFooter({ workstream, contributions, audit });
-  return footer ? `${answer}\n\n---\n\n${footer}` : answer;
+  const raw = await callClaude({ prompt, model: config.model, system, config });
+  const { body, citedIds } = useCitedTags ? parseCitations(raw) : { body: raw, citedIds: [] };
+  const footer = buildAnswerFooter({ workstream, contributions: contribs, audit, citedIds });
+  return footer ? `${body}\n\n---\n\n${footer}` : body;
 }
 
-function buildAnswerFooter({ workstream, contributions, audit }) {
+const DEFAULT_CONTRIBUTOR_CAP = 5;
+
+function buildAnswerFooter({ workstream, contributions, audit, citedIds }) {
   if (!workstream) return '';
+  const cited = new Set(citedIds || []);
   if (audit) {
-    return formatAuditBlock(collectSourceRefs(workstream, contributions || []));
+    const refs = collectSourceRefs(workstream, contributions);
+    const filtered = { sources: refs.sources.filter(s => cited.has(s.contributionId)), unknown: [] };
+    if (filtered.sources.length === 0) return '';
+    return formatAuditBlock(filtered);
   }
-  return formatContributorLine(collectContributorCounts(workstream, contributions || []));
+  if (cited.size === 0) return '';
+  const counts = collectContributorCounts(workstream, contributions, { citedIds: cited });
+  if (counts.length === 0) return '';
+  return formatContributorLine(counts.slice(0, DEFAULT_CONTRIBUTOR_CAP));
 }
+
+export { parseCitations };
