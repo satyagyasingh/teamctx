@@ -30,6 +30,33 @@ const workstream = {
   ],
 };
 
+describe('backwards compatibility with pre-provenance projects', () => {
+  it('handles nodes without sourceContributionIds (legacy schema) — no crash, empty footer', () => {
+    const legacyWs = { id: 'main', name: 'M', whys: [
+      { id: 'w1', text: 'legacy why', whats: [{ id: 'wt1', text: 'legacy what', hows: [{ id: 'h1', text: 'legacy how' }] }] },
+    ]};
+    expect(collectContributorCounts(legacyWs, contributions)).toEqual([]);
+    expect(collectSourceRefs(legacyWs, contributions)).toEqual({ sources: [], unknown: [] });
+    expect(formatContributorLine([])).toBe('');
+  });
+
+  it('handles contributions without tagged / source / author fields', () => {
+    const oldContribs = [{ id: 'c-old', text: 'legacy entry' }];
+    const ws = { id: 'main', name: 'M', whys: [{ id: 'w1', text: 't', sourceContributionIds: ['c-old'], whats: [] }] };
+    expect(collectContributorCounts(ws, oldContribs)).toEqual([]);
+    const { sources } = collectSourceRefs(ws, oldContribs);
+    expect(sources[0]).toMatchObject({ author: 'unknown', source: 'cli', tagged: null });
+  });
+
+  it('handles missing contributions.jsonl entries (id references a deleted contribution)', () => {
+    const ws = { id: 'main', name: 'M', whys: [{ id: 'w1', text: 't', sourceContributionIds: ['c-ghost'], whats: [] }] };
+    const { sources, unknown } = collectSourceRefs(ws, []);
+    expect(sources).toEqual([]);
+    expect(unknown).toEqual(['c-ghost']);
+    expect(formatAuditBlock({ sources, unknown })).toContain('unknown');
+  });
+});
+
 describe('collectContributorCounts', () => {
   it('counts distinct contributions per author, marks decisions, sorts by total desc', () => {
     const counts = collectContributorCounts(workstream, contributions);
