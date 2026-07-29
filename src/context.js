@@ -1,5 +1,9 @@
 import { proposeDiff, callClaude, extractJson } from './ai.js';
 import { applyOps } from './ops.js';
+import {
+  collectContributorCounts, collectSourceRefs,
+  formatContributorsSection, formatContributorLine, formatAuditBlock,
+} from './provenance.js';
 
 function decisionMarker(node, contributionsById) {
   const ids = node.sourceContributionIds || [];
@@ -39,7 +43,8 @@ export function serializeToMd(workstream, projectName, lastUpdatedBy = '', contr
     return out;
   }).join('');
 
-  return header + tree;
+  const contributorsSection = formatContributorsSection(collectContributorCounts(workstream, contributions));
+  return header + tree + (contributorsSection ? `\n${contributorsSection}` : '');
 }
 
 export async function updateShared(workstream, contribution, config) {
@@ -187,7 +192,7 @@ export function normalizeSubworkstreamProposal(parsed, whys) {
   return { splits, leftover };
 }
 
-export async function answerQuestion({ sharedMd, roleMd, question, config }) {
+export async function answerQuestion({ sharedMd, roleMd, question, config, workstream, contributions, audit }) {
   const context = [
     roleMd ? `## Your Role Context\n\n${roleMd}` : '',
     sharedMd ? `## Shared Project Context\n\n${sharedMd}` : '',
@@ -200,5 +205,15 @@ export async function answerQuestion({ sharedMd, roleMd, question, config }) {
   ].join(' ');
   const prompt = `Context:\n\n${context}\n\n---\n\nQuestion: ${question}`;
 
-  return callClaude({ prompt, model: config.model, system, config });
+  const answer = await callClaude({ prompt, model: config.model, system, config });
+  const footer = buildAnswerFooter({ workstream, contributions, audit });
+  return footer ? `${answer}\n\n---\n\n${footer}` : answer;
+}
+
+function buildAnswerFooter({ workstream, contributions, audit }) {
+  if (!workstream) return '';
+  if (audit) {
+    return formatAuditBlock(collectSourceRefs(workstream, contributions || []));
+  }
+  return formatContributorLine(collectContributorCounts(workstream, contributions || []));
 }
