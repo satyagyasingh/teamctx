@@ -7,18 +7,25 @@ markers work. What's new: **`ask` now surfaces that trail every time.**
 
 ## What you get for free
 
-Any `teamctx ask "..."` now ends with a one-line contributor summary:
+Any `teamctx ask "..."` now ends with a one-line summary of the contributors
+whose material the AI actually used for **this specific answer** — capped
+at the top 5:
 
 ```
 > AI answer here.
 >
 > ---
 >
-> **Contributions from:** priya (3, 1 decision), rajeev (1), shikhin (1)
+> **Contributions from:** rajeev (1), priya (1, 1 decision)
 ```
 
-The line is derived locally from the workstream tree — no extra AI call,
-essentially free.
+How it works: the tree passed to the AI is annotated with inline
+`[sources: c-x]` tags, and the system prompt asks the AI to end its answer
+with `## Citations: c-x, c-y` listing which contributions it used. teamctx
+parses that block, filters, and renders the footer — no second AI call.
+
+If the AI answers with `## Citations: none` (or forgets the block), no
+footer renders.
 
 Compiled files also grow a **Contributors** section at the bottom of
 `context/workstreams/<id>.md`:
@@ -34,7 +41,8 @@ Compiled files also grow a **Contributors** section at the bottom of
 ## Detailed audit — `--audit`
 
 Add `--audit` to `ask` (or `audit: true` on the MCP `ask` tool, or an
-`audit=true` field on the web `/ask` form) to expand the footer:
+`audit=true` field on the web `/ask` form) to expand the footer into the
+full source list for the contributions the AI cited (no cap):
 
 ```
 > AI answer here.

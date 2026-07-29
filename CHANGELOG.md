@@ -8,14 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Contribution provenance on `ask` output.** Every `teamctx ask "..."`
-  answer now ends with a one-line contributor summary
-  (`**Contributions from:** priya (3, 1 decision), rajeev (1), …`) derived
-  from the workstream tree. No extra AI call, pure local read.
-- **`ask --audit`** expands the footer into a detailed source list — one
-  entry per contribution that touched a node the AI's answer is grounded
-  in, with author, date, source system, decision tag, and text snippet.
-  Still zero AI cost.
+- **Per-answer contribution attribution on `ask`.** Every
+  `teamctx ask "..."` answer ends with a one-line summary of the
+  contributors whose material the AI actually cited for this specific
+  answer (capped at top 5). The tree passed to the AI is annotated with
+  inline `[sources: c-x]` tags, and the AI is asked to end its answer with
+  a `## Citations: c-x, c-y` block that teamctx parses and strips. No
+  second API call.
+- **`ask --audit`** expands the footer into the full source list for the
+  contributions the AI cited — author, date, source system, decision tag,
+  and text snippet, uncapped. Same one-call flow, richer rendering.
 - **Compiled workstream markdown** gains a `## Contributors` section at
   the bottom, listing distinct authors with counts. Same source of truth
   as the `ask` footer.
