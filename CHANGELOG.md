@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Contribution provenance on `ask` output.** Every `teamctx ask "..."`
+  answer now ends with a one-line contributor summary
+  (`**Contributions from:** priya (3, 1 decision), rajeev (1), …`) derived
+  from the workstream tree. No extra AI call, pure local read.
+- **`ask --audit`** expands the footer into a detailed source list — one
+  entry per contribution that touched a node the AI's answer is grounded
+  in, with author, date, source system, decision tag, and text snippet.
+  Still zero AI cost.
+- **Compiled workstream markdown** gains a `## Contributors` section at
+  the bottom, listing distinct authors with counts. Same source of truth
+  as the `ask` footer.
+- **MCP `ask` tool** gains an optional `audit: boolean` argument that
+  mirrors the CLI flag.
+- **Web `/ask` endpoint** accepts an `audit` field on the POST body
+  (`true`/`1`/`on`/`yes` all count).
+- **`teamctx reflect` preserves provenance.** When the AI-rewritten tree
+  keeps a node id, the original `sourceContributionIds` are merged into
+  the new node — reflection no longer loses the trail.
+- **Docs**: `docs/audit.md` — end-user explainer with examples.
+
+### Not shipping (deliberate)
+- Per-sentence citation ("this claim came from contribution X"). Attribution
+  is at the node level.
+- Backfill of provenance on nodes that predate this feature — they simply
+  show no contributors and audit-flags them as "unknown."
+- A diff view of what each contribution changed in the tree.
+
 ## [0.2.0] - 2026-07-21
 
 ### Added
