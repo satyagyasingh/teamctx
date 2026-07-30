@@ -17,7 +17,7 @@ In the AI panel, type:
 Follow the recipe in @recipes/author-contribution.md.
 
 My rough note: <your rough note here>
-Current shared context: @.teamctx/context/shared.md
+Current shared context: @.teamctx/context/workstreams/main.md
 ```
 
 Cursor will pull both files into the conversation. Read the output; if it
@@ -30,9 +30,9 @@ Use Composer/Agent mode so it can propose edits to files directly:
 
 ```
 Follow the recipe in @recipes/cleanup-context.md against
-@.teamctx/context/shared.md. Focus: <optional — leave blank for whole tree>.
+@.teamctx/context/workstreams/main.md. Focus: <optional — leave blank for whole tree>.
 
-Propose the rewrite as edits to .teamctx/context/shared.md so I can review
+Propose the rewrite as edits to .teamctx/context/workstreams/main.md so I can review
 the diff in the editor before accepting.
 ```
 

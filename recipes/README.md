@@ -32,7 +32,7 @@ should work anywhere. PRs adding a new tool guide are welcome; see
   new subfolder.
 - **Output is pasteable back into teamctx.** `author-contribution.md`'s output
   goes straight into `teamctx contribute "..."`; `cleanup-context.md`'s output
-  is reviewable as a diff against `.teamctx/context/shared.md`.
+  is reviewable as a diff against `.teamctx/context/workstreams/main.md`.
 - **Guardrails matter.** Both recipes explicitly tell the AI not to invent
   facts, not to drop decisions, and to ask when things are unclear. Change
   them if your team wants different guardrails.

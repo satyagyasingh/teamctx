@@ -17,7 +17,7 @@ Use @recipes/author-contribution.md with this rough note:
 
 <your rough note here>
 
-And this current shared context: @.teamctx/context/shared.md
+And this current shared context: @.teamctx/context/workstreams/main.md
 
 When you're done, run `teamctx contribute "..."` with the result. Add
 --decision if the recipe says it's a decision.
@@ -29,15 +29,15 @@ to run the `teamctx contribute` command for you.
 **For `cleanup-context.md`:**
 
 ```
-Use @recipes/cleanup-context.md on @.teamctx/context/shared.md.
+Use @recipes/cleanup-context.md on @.teamctx/context/workstreams/main.md.
 Focus: <optional — leave blank for whole tree>
 
 Show me the diff, and if I approve, offer to write the changes to
-.teamctx/context/shared.md.
+.teamctx/context/workstreams/main.md.
 ```
 
 Review the proposed diff carefully before letting Claude Code apply it —
-`.teamctx/context/shared.md` is the human-readable projection of `shared.json`
+`.teamctx/context/workstreams/main.md` is the human-readable projection of `workstreams/main.json`
 and hand-edits are fine, but the file is committed to your team's repo, so
 mistakes are visible.
 

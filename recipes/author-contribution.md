@@ -19,7 +19,7 @@ place the update in the right part of the tree.
 ## The prompt
 
 Copy everything below into your AI tool. Replace the two `<PASTE …>` blocks
-with your rough note and the contents of `.teamctx/context/shared.md`.
+with your rough note and the contents of `.teamctx/context/workstreams/main.md`.
 
 ````
 You are helping me shape a contribution to my team's shared context in teamctx.
@@ -35,7 +35,7 @@ Here is the current shared context so you can place the update in the right
 part of the tree (and avoid repeating or contradicting something that's
 already there):
 
-<PASTE .teamctx/context/shared.md HERE>
+<PASTE .teamctx/context/workstreams/main.md HERE>
 
 Please produce:
 

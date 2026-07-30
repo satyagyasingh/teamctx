@@ -14,8 +14,8 @@ paste the output back into your terminal.
    and paste it into the chat.
 3. When it asks (or in the same message), paste:
    - Your rough note, in place of `<PASTE YOUR ROUGH NOTE HERE>`.
-   - The full contents of `.teamctx/context/shared.md`, in place of
-     `<PASTE .teamctx/context/shared.md HERE>`.
+   - The full contents of `.teamctx/context/workstreams/main.md`, in place of
+     `<PASTE .teamctx/context/workstreams/main.md HERE>`.
 4. Read the output. If ChatGPT asks a clarifying question, answer it before
    letting it write the final contribution.
 5. Copy the final contribution into your terminal:
@@ -29,16 +29,16 @@ paste the output back into your terminal.
 Same pattern:
 
 1. Paste [`recipes/cleanup-context.md`](../cleanup-context.md) into the chat.
-2. Paste the current `.teamctx/context/shared.md` and optionally a focus area.
+2. Paste the current `.teamctx/context/workstreams/main.md` and optionally a focus area.
 3. Copy the rewritten tree into a scratch file, `diff` it against your real
-   `.teamctx/context/shared.md`, and apply the changes you want by hand.
+   `.teamctx/context/workstreams/main.md`, and apply the changes you want by hand.
 
 ## Tips
 
 - For teams that use ChatGPT a lot, save each recipe as a **Custom GPT** with
   the recipe as its system prompt. Then contributors just paste their rough
   note and the current context — no need to paste the recipe every time.
-- If your `shared.md` is large, ChatGPT may truncate. Split the cleanup into
-  workstream-sized passes rather than one full-tree pass.
+- If your workstream markdown is large, ChatGPT may truncate. Split the cleanup
+  into workstream-sized passes rather than one full-tree pass.
 - ChatGPT can't run `teamctx` for you — always copy the final output back into
   your terminal to actually record the contribution.

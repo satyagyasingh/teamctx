@@ -2,17 +2,18 @@
 
 Use this to review and reshape the existing shared context tree — prune stale
 items, tighten wording, and reorganize — before running `teamctx reflect` or
-hand-editing `.teamctx/context/shared.md`.
+hand-editing `.teamctx/context/workstreams/main.md`.
 
 **When to use:** the shared tree has grown noisy or repetitive, several
 contributions are saying similar things, or you want a human-in-the-loop pass
 before letting `teamctx reflect` do it automatically.
 
-**Inputs:** the current `shared.md`, and optionally a focus area (e.g. "just
-the How section", "the auth workstream").
+**Inputs:** the current workstream markdown (`.teamctx/context/workstreams/main.md`,
+or the file for whichever workstream you're focusing on), and optionally a
+focus area (e.g. "just the How section", "the auth workstream").
 
 **Output:** a rewritten tree you can review as a diff against current
-`shared.md`, plus a list of what was pruned or merged and why.
+`main.md`, plus a list of what was pruned or merged and why.
 
 ---
 
@@ -30,7 +31,7 @@ that isn't already in the tree.
 
 Here is the current shared context:
 
-<PASTE .teamctx/context/shared.md HERE>
+<PASTE .teamctx/context/workstreams/main.md HERE>
 
 Focus area (optional — if blank, review the whole tree):
 
@@ -63,7 +64,7 @@ Rules:
 - Run this on one workstream at a time if your tree is large — smaller inputs
   produce more careful cleanups.
 - Save the AI's output to a scratch file, diff it against
-  `.teamctx/context/shared.md`, and apply the changes you like by hand. This
+  `.teamctx/context/workstreams/main.md`, and apply the changes you like by hand. This
   keeps you in control of what actually lands.
 - `teamctx reflect` does a similar cleanup pass automatically. Use this
   recipe when you want to steer the cleanup yourself, or when you want to
