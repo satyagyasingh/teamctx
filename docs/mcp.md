@@ -45,8 +45,8 @@ either manager-gated or explicitly flagged as structural.
 
 | Tool | Purpose |
 | --- | --- |
-| `contribute({text, workstream?, decision?, apply?, author?})` | Add a contribution. Defaults to enqueueing for manager approval; set `apply: true` to write immediately (subject to manager gate). |
-| `submit_contribution` | **Deprecated** alias for `contribute` with `apply: true`. Kept for one release; prefer `contribute`. |
+| `contribute({text, workstream?, decision?, apply?, author?})` | Add a contribution. Defaults to enqueueing for manager approval; set `apply: true` to write immediately (**manager-gated when `apply: true`** — `author` must match `config.manager` when set). |
+| `submit_contribution` | **Deprecated** alias for `contribute` with `apply: true`. Also manager-gated. Kept for one release; prefer `contribute`. |
 
 ### Tier 2 — structural / gated (⚠ RISKY)
 

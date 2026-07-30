@@ -2,6 +2,7 @@ import { readConfig, readWorkstream, writeWorkstream, writeWorkstreamMd, appendC
 import { updateShared, generateRoleFile, serializeToMd } from '../../src/context.js';
 import { commitContext, pushContext } from '../../src/git.js';
 import { UnknownWorkstreamError } from './role.core.js';
+import { assertManager } from './review.core.js';
 
 function newContribution({ text, author, tagged, source, workstream }) {
   const idPrefix = source === 'mcp' ? 'mcp' : 'c';
@@ -35,6 +36,7 @@ export async function contributeCore({
   if (!text) throw new Error('contribution text is required');
   const config = readConfig(teamctxDir);
   const actor = author || config.me;
+  if (apply) assertManager(config, { actor });
   const targetId = workstreamId || config.activeWorkstream || 'main';
   const known = new Set([
     ...(config.workstreams || []).map(w => w.id),

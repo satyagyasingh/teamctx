@@ -9,6 +9,7 @@ import {
   readConfig, readWorkstream, listWorkstreamIds,
   readSharedMd,
   readRoleFile,
+  readContributions,
 } from '../src/storage.js';
 import { answerQuestion } from '../src/context.js';
 import { initProject } from '../cli/commands/init.core.js';
@@ -387,7 +388,6 @@ export function makeHandlers(projectRoot) {
       const teamctxDir = dir();
       const config = readConfig(teamctxDir);
       const workstreams = listAllWorkstreams({ teamctxDir });
-      const { readContributions } = await import('../src/storage.js');
       const contributions = readContributions(teamctxDir);
       const decisions = contributions.filter(c => c.tagged === 'decision');
       return textResult({
