@@ -1,5 +1,16 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync, readdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
+import * as github from './adapters/github.js';
+
+/**
+ * Storage layer. Each exported function takes a `dir` handle. That handle is
+ * usually a filesystem path string (local mode); when it's the object
+ * `{ __backend: 'github', owner, repo, ref?, ghToken }`, calls delegate to
+ * the GitHub adapter instead. This keeps every `.core.js` module and the MCP
+ * handlers unaware of the backend.
+ */
+
+const isGithub = github.isGithubCtx;
 
 function resolve(dir, ...parts) {
   return join(dir || getTeamctxDir(), ...parts);
@@ -18,14 +29,17 @@ export function getTeamctxDir(startPath = process.cwd()) {
 }
 
 export function readConfig(dir) {
+  if (isGithub(dir)) return github.readConfig(dir);
   return JSON.parse(readFileSync(resolve(dir, 'config.json'), 'utf-8'));
 }
 
 export function writeConfig(config, dir) {
+  if (isGithub(dir)) return github.writeConfig(config, dir);
   writeFileSync(resolve(dir, 'config.json'), JSON.stringify(config, null, 2));
 }
 
 export function readShared(dir) {
+  if (isGithub(dir)) return github.readShared(dir);
   const mainWs = resolve(dir, 'workstreams', 'main.json');
   if (existsSync(mainWs)) return readWorkstream('main', dir);
   const p = resolve(dir, 'shared.json');
@@ -34,16 +48,19 @@ export function readShared(dir) {
 }
 
 export function writeShared(workstream, dir) {
+  if (isGithub(dir)) return github.writeShared(workstream, dir);
   const mainWs = resolve(dir, 'workstreams', 'main.json');
   if (existsSync(mainWs)) return writeWorkstream('main', workstream, dir);
   writeFileSync(resolve(dir, 'shared.json'), JSON.stringify(workstream, null, 2));
 }
 
 export function appendContribution(contribution, dir) {
+  if (isGithub(dir)) return github.appendContribution(contribution, dir);
   appendFileSync(resolve(dir, 'contributions.jsonl'), JSON.stringify(contribution) + '\n');
 }
 
 export function readContributions(dir) {
+  if (isGithub(dir)) return github.readContributions(dir);
   const p = resolve(dir, 'contributions.jsonl');
   if (!existsSync(p)) return [];
   return readFileSync(p, 'utf-8').split('\n').filter(Boolean).map(line => JSON.parse(line));
@@ -62,6 +79,7 @@ function sanitizeQueueId(id) {
 }
 
 export function writeRoleFile(slug, content, dir) {
+  if (isGithub(dir)) { sanitizeSlug(slug); return github.writeRoleFile(slug, content, dir); }
   sanitizeSlug(slug);
   const rolesDir = resolve(dir, 'context', 'roles');
   mkdirSync(rolesDir, { recursive: true });
@@ -69,11 +87,13 @@ export function writeRoleFile(slug, content, dir) {
 }
 
 export function readRoleFile(slug, dir) {
+  if (isGithub(dir)) { sanitizeSlug(slug); return github.readRoleFile(slug, dir); }
   sanitizeSlug(slug);
   return readFileSync(resolve(dir, 'context', 'roles', `${slug}.md`), 'utf-8');
 }
 
 export function readSharedMd(dir) {
+  if (isGithub(dir)) return github.readSharedMd(dir);
   const mainMd = resolve(dir, 'context', 'workstreams', 'main.md');
   if (existsSync(mainMd)) return readWorkstreamMd('main', dir);
   const p = resolve(dir, 'context', 'shared.md');
@@ -82,6 +102,7 @@ export function readSharedMd(dir) {
 }
 
 export function writeSharedMd(content, dir) {
+  if (isGithub(dir)) return github.writeSharedMd(content, dir);
   const mainMd = resolve(dir, 'context', 'workstreams', 'main.md');
   if (existsSync(mainMd)) return writeWorkstreamMd('main', content, dir);
   const contextDir = resolve(dir, 'context');
@@ -94,6 +115,7 @@ export function queueDir(dir) {
 }
 
 export function writeQueueItem(item, dir) {
+  if (isGithub(dir)) { sanitizeQueueId(item?.id); return github.writeQueueItem(item, dir); }
   sanitizeQueueId(item?.id);
   const d = queueDir(dir);
   mkdirSync(d, { recursive: true });
@@ -101,11 +123,13 @@ export function writeQueueItem(item, dir) {
 }
 
 export function readQueueItem(id, dir) {
+  if (isGithub(dir)) { sanitizeQueueId(id); return github.readQueueItem(id, dir); }
   sanitizeQueueId(id);
   return JSON.parse(readFileSync(join(queueDir(dir), `${id}.json`), 'utf-8'));
 }
 
 export function listQueue(dir) {
+  if (isGithub(dir)) return github.listQueue(dir);
   const d = queueDir(dir);
   if (!existsSync(d)) return [];
   return readdirSync(d)
@@ -115,11 +139,13 @@ export function listQueue(dir) {
 }
 
 export function deleteQueueItem(id, dir) {
+  if (isGithub(dir)) { sanitizeQueueId(id); return github.deleteQueueItem(id, dir); }
   sanitizeQueueId(id);
   unlinkSync(join(queueDir(dir), `${id}.json`));
 }
 
 export function writeRejected(item, dir) {
+  if (isGithub(dir)) return github.writeRejected(item, dir);
   const d = resolve(dir, 'rejected');
   mkdirSync(d, { recursive: true });
   writeFileSync(join(d, `${item.id}.json`), JSON.stringify(item, null, 2));
@@ -130,16 +156,19 @@ export function snapshotsDir(dir) {
 }
 
 export function writeSnapshot(snapshot, dir) {
+  if (isGithub(dir)) return github.writeSnapshot(snapshot, dir);
   const d = snapshotsDir(dir);
   mkdirSync(d, { recursive: true });
   writeFileSync(join(d, `${snapshot.id}.json`), JSON.stringify(snapshot, null, 2));
 }
 
 export function readSnapshot(id, dir) {
+  if (isGithub(dir)) return github.readSnapshot(id, dir);
   return JSON.parse(readFileSync(join(snapshotsDir(dir), `${id}.json`), 'utf-8'));
 }
 
 export function listSnapshots(dir) {
+  if (isGithub(dir)) return github.listSnapshots(dir);
   const d = snapshotsDir(dir);
   if (!existsSync(d)) return [];
   return readdirSync(d)
@@ -149,6 +178,7 @@ export function listSnapshots(dir) {
 }
 
 export function resolveSnapshotId(prefix, dir) {
+  if (isGithub(dir)) return github.resolveSnapshotId(prefix, dir);
   const d = snapshotsDir(dir);
   if (!existsSync(d)) throw new Error(`no snapshot matches "${prefix}"`);
   const ids = readdirSync(d)
@@ -163,12 +193,14 @@ export function resolveSnapshotId(prefix, dir) {
 }
 
 export function readCurrentSnapshotPointer(dir) {
+  if (isGithub(dir)) return github.readCurrentSnapshotPointer(dir);
   const p = join(snapshotsDir(dir), 'current.json');
   if (!existsSync(p)) return null;
   return JSON.parse(readFileSync(p, 'utf-8'));
 }
 
 export function writeCurrentSnapshotPointer(pointer, dir) {
+  if (isGithub(dir)) return github.writeCurrentSnapshotPointer(pointer, dir);
   const d = snapshotsDir(dir);
   mkdirSync(d, { recursive: true });
   writeFileSync(join(d, 'current.json'), JSON.stringify(pointer, null, 2));
@@ -181,6 +213,7 @@ function sanitizeWorkstreamId(id) {
 }
 
 export function readWorkstream(id, dir) {
+  if (isGithub(dir)) { sanitizeWorkstreamId(id); return github.readWorkstream(id, dir); }
   sanitizeWorkstreamId(id);
   const p = resolve(dir, 'workstreams', `${id}.json`);
   if (!existsSync(p)) return { id, name: '', whys: [] };
@@ -188,6 +221,7 @@ export function readWorkstream(id, dir) {
 }
 
 export function writeWorkstream(id, workstream, dir) {
+  if (isGithub(dir)) { sanitizeWorkstreamId(id); return github.writeWorkstream(id, workstream, dir); }
   sanitizeWorkstreamId(id);
   const wsDir = resolve(dir, 'workstreams');
   mkdirSync(wsDir, { recursive: true });
@@ -195,6 +229,7 @@ export function writeWorkstream(id, workstream, dir) {
 }
 
 export function listWorkstreamIds(dir) {
+  if (isGithub(dir)) return github.listWorkstreamIds(dir);
   const wsDir = resolve(dir, 'workstreams');
   if (!existsSync(wsDir)) return [];
   return readdirSync(wsDir)
@@ -204,6 +239,7 @@ export function listWorkstreamIds(dir) {
 }
 
 export function readWorkstreamMd(id, dir) {
+  if (isGithub(dir)) { sanitizeWorkstreamId(id); return github.readWorkstreamMd(id, dir); }
   sanitizeWorkstreamId(id);
   const p = resolve(dir, 'context', 'workstreams', `${id}.md`);
   if (!existsSync(p)) return '';
@@ -211,6 +247,7 @@ export function readWorkstreamMd(id, dir) {
 }
 
 export function writeWorkstreamMd(id, content, dir) {
+  if (isGithub(dir)) { sanitizeWorkstreamId(id); return github.writeWorkstreamMd(id, content, dir); }
   sanitizeWorkstreamId(id);
   const mdDir = resolve(dir, 'context', 'workstreams');
   mkdirSync(mdDir, { recursive: true });
