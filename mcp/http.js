@@ -1,21 +1,39 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { buildServer } from './server.js';
+import { GithubSession } from '../src/adapters/github.js';
+import { runWithSession } from '../src/session-context.js';
 
 /**
- * Handle a single MCP HTTP request. The Node HTTP request/response pair is
- * passed straight through to the MCP SDK's streamable HTTP transport.
+ * Handle a single MCP HTTP request against a GitHub-backed teamctx project.
  *
- * Stateless mode (sessionIdGenerator: undefined) — each request stands alone,
- * which is what a serverless Vercel function needs. No cross-request memory.
+ *   1. Build a GithubSession from the request's project context.
+ *   2. `await session.prefetch()` — load all `.teamctx/**` into memory.
+ *   3. Run the MCP tool inside `runWithSession(session, ...)` so all
+ *      storage calls hit the in-memory buffer instead of the filesystem.
+ *   4. `session.commit(...)` is called from inside the tool via
+ *      `commitContext(msg)` (see src/git.js). One tool call → one commit.
+ *
+ * projectContext shape: { __backend:'github', owner, repo, ref?, ghToken }
  */
 export async function handleMcpHttp(req, res, projectContext) {
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  const server = buildServer(projectContext);
+  const session = new GithubSession({
+    owner: projectContext.owner,
+    repo: projectContext.repo,
+    ref: projectContext.ref || null,
+    ghToken: projectContext.ghToken,
+  });
+  await session.prefetch();
 
-  await server.connect(transport);
+  await runWithSession(session, async () => {
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    // The MCP server itself doesn't care about the backend; storage dispatch
+    // sees the session in async context and routes reads/writes to it.
+    const server = buildServer({ __backend: 'github', ...projectContext });
+    await server.connect(transport);
 
-  const body = await readJsonBody(req);
-  await transport.handleRequest(req, res, body);
+    const body = await readJsonBody(req);
+    await transport.handleRequest(req, res, body);
+  });
 }
 
 async function readJsonBody(req) {

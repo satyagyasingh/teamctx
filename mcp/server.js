@@ -336,7 +336,12 @@ function reportBackContribute(r) {
 }
 
 export function makeHandlers(projectRoot) {
-  const dir = () => getTeamctxDir(projectRoot);
+  // `projectRoot` is either a filesystem path (local/stdio mode) or a hosted
+  // context object `{__backend:'github', ...}`. In hosted mode, storage
+  // dispatch ignores the `dir` arg and pulls from the ambient GithubSession
+  // (see src/session-context.js), so any truthy placeholder here is fine.
+  const isHosted = typeof projectRoot === 'object' && projectRoot?.__backend === 'github';
+  const dir = () => isHosted ? projectRoot : getTeamctxDir(projectRoot);
   // Some tools (init) run before .teamctx/ exists, so they take projectRoot directly.
 
   return {
