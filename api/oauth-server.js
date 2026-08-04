@@ -35,11 +35,30 @@ function baseUrlFor(req) {
 // ---- Health / config check -------------------------------------------
 // Handy for confirming a deploy has its env vars before touching Claude.
 
-app.get('/oauth/status', (req, res) => {
+app.get('/oauth/status', async (req, res) => {
   const cfg = oauthConfigStatus();
+
+  // Actually round-trip the store. Env vars being *present* says nothing about
+  // whether the URL and token are correct, and a store that silently fails at
+  // runtime shows up as baffling redirect loops rather than a clear error.
+  let kvReachable = false;
+  let kvError = null;
+  if (isPersistent()) {
+    const probe = `teamctx:healthcheck:${Date.now()}`;
+    try {
+      await kvSet(probe, { ok: true }, { ttlSeconds: 60 });
+      kvReachable = (await kvGet(probe))?.ok === true;
+      await kvTake(probe);
+    } catch (e) {
+      kvError = e.message?.slice(0, 200) ?? String(e);
+    }
+  }
+
   res.json({
     oauthConfigured: provider !== null,
     kvConfigured: isPersistent(),
+    kvReachable,
+    ...(kvError ? { kvError } : {}),
     missing: Object.entries({ ...cfg, kv: isPersistent() })
       .filter(([, present]) => !present)
       .map(([name]) => name),
@@ -81,7 +100,7 @@ app.get('/oauth/github/callback', async (req, res) => {
       await kvSet(keys.session(sid), githubUser, { ttlSeconds: TTL.session });
       res.setHeader('Set-Cookie',
         `teamctx_sid=${sid}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${TTL.session}`);
-      return res.redirect('/settings');
+      return res.redirect(303, '/settings');
     } catch (e) {
       return res.status(400).send(errorPage(e.message));
     }
@@ -158,22 +177,29 @@ app.get('/settings', async (req, res) => {
   res.send(settingsPage({ user, hasKey: !!existing, saved: req.query.saved === '1' }));
 });
 
+/**
+ * Note the explicit 303s. Express defaults `res.redirect` to 302, and a 302
+ * (like a 307) may preserve the request method — behind Vercel's rewrite layer
+ * these surface as 307, which makes the browser re-POST to the redirect
+ * target. That turns Post/Redirect/Get into an infinite POST loop.
+ * 303 See Other is the status that mandates a GET on the next hop.
+ */
 app.post('/settings', async (req, res) => {
   const user = await currentUser(req);
-  if (!user) return res.redirect('/settings');
+  if (!user) return res.redirect(303, '/settings');
 
   const apiKey = String(req.body?.apiKey || '').trim();
   const provider_ = String(req.body?.provider || 'anthropic').trim();
 
   if (apiKey === '__clear__') {
     await kvSet(keys.aiKey(user.id), null);
-    return res.redirect('/settings?saved=1');
+    return res.redirect(303, '/settings?saved=1');
   }
   if (!apiKey) {
     return res.status(400).send(errorPage('Paste a key, or leave the page.'));
   }
   await kvSet(keys.aiKey(user.id), { provider: provider_, apiKey });
-  res.redirect('/settings?saved=1');
+  res.redirect(303, '/settings?saved=1');
 });
 
 // ---- The SDK's OAuth server: metadata, /authorize, /token, /register --
