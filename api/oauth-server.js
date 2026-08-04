@@ -160,21 +160,28 @@ async function currentUser(req) {
 
 app.get('/settings', async (req, res) => {
   const user = await currentUser(req);
-  if (!user) {
-    // Kick off a browser login against the same GitHub OAuth app.
-    const state = randomBytes(18).toString('base64url');
-    await kvSet(keys.pending(`settings:${state}`), { kind: 'settings' }, { ttlSeconds: TTL.pending });
-    const url = new URL('https://github.com/login/oauth/authorize');
-    url.searchParams.set('client_id', process.env.GITHUB_OAUTH_CLIENT_ID || '');
-    url.searchParams.set('redirect_uri', `${baseUrlFor(req)}/oauth/github/callback`);
-    url.searchParams.set('scope', GITHUB_SCOPES);
-    url.searchParams.set('state', state);
-    return res.redirect(url.toString());
-  }
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+  // Signed out renders a sign-in page rather than redirecting straight to
+  // GitHub. GitHub re-approves an already-authorised app without prompting,
+  // so an automatic redirect here would sign the user back in the instant
+  // they landed — making "signed out" a state you could never actually see.
+  if (!user) return res.send(signInPage());
 
   const existing = await kvGet(keys.aiKey(user.id));
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(settingsPage({ user, hasKey: !!existing, saved: req.query.saved === '1' }));
+});
+
+/** Starts the GitHub login. Only reached by clicking Sign in. */
+app.get('/settings/signin', async (req, res) => {
+  const state = randomBytes(18).toString('base64url');
+  await kvSet(keys.pending(`settings:${state}`), { kind: 'settings' }, { ttlSeconds: TTL.pending });
+  const url = new URL('https://github.com/login/oauth/authorize');
+  url.searchParams.set('client_id', process.env.GITHUB_OAUTH_CLIENT_ID || '');
+  url.searchParams.set('redirect_uri', `${baseUrlFor(req)}/oauth/github/callback`);
+  url.searchParams.set('scope', GITHUB_SCOPES);
+  url.searchParams.set('state', state);
+  res.redirect(url.toString());
 });
 
 /**
@@ -186,15 +193,7 @@ app.post('/settings/logout', async (req, res) => {
   const sid = readSessionId(req);
   if (sid) await kvDelete(keys.session(sid));
   res.setHeader('Set-Cookie', 'teamctx_sid=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
-  // Render the confirmation rather than redirecting to /settings: that page
-  // starts a fresh GitHub login, and GitHub re-approves an already-authorised
-  // app without prompting, so you would be signed straight back in.
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(shell('Signed out', `
-<h1>Signed out</h1>
-<p><a href="/settings">Sign in again</a></p>
-<p class="muted">To sign in as a different GitHub account, first revoke teamctx
-under <a href="https://github.com/settings/applications" target="_blank" rel="noreferrer">GitHub &rarr; Authorized OAuth Apps</a>.</p>`));
+  res.redirect(303, '/settings');
 });
 
 /**
@@ -286,6 +285,15 @@ your repo.</p>
   <input id="apiKey" name="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…" required>
   <button type="submit">Save</button>
 </form>`);
+
+const signInPage = () => shell('Sign in', `
+<h1>teamctx settings</h1>
+<p>Sign in with GitHub to set the API key used by the teamctx tools that call
+a model.</p>
+<p><a href="/settings/signin"><button type="button">Sign in with GitHub</button></a></p>
+<p class="muted">GitHub will not prompt you again if you have already
+authorised teamctx. To sign in as a different account, revoke teamctx under
+<a href="https://github.com/settings/applications" target="_blank" rel="noreferrer">GitHub &rarr; Authorized OAuth Apps</a> first.</p>`);
 
 const errorPage = (message) => shell('Error', `
 <h1>Something went wrong</h1>
