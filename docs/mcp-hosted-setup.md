@@ -22,16 +22,20 @@ secret — the secret is shown once.
 > Use an **OAuth App**, not a GitHub App. OAuth Apps issue the user-scoped
 > `repo` token the MCP tools need, with no per-repo installation step.
 
-## 2. Create the KV store
+## 2. Create the Redis store
 
-Vercel dashboard → your project → **Storage** → **Create Database** →
-**KV** (Upstash Redis). Connect it to the project.
+Use **Upstash directly** — <https://upstash.com>, sign in with GitHub →
+**Create Database** → Redis → pick a region near your deployment.
 
-This injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically. Upstash
-directly also works — the code accepts `UPSTASH_REDIS_REST_URL` /
-`UPSTASH_REDIS_REST_TOKEN` too.
+From the database page, copy the two values under **REST API**.
 
-Free tier is far more than enough: we store a few hundred bytes per user.
+Free tier at time of writing: 256 MB, 500k commands/month, no credit card.
+teamctx stores a few hundred bytes per user, so this is ample.
+
+> Vercel's **Storage → KV** tab is the same Upstash product behind a
+> paid Vercel plan. Going to Upstash directly avoids that. The code accepts
+> either naming (`UPSTASH_REDIS_REST_*` or `KV_REST_API_*`), so if you are
+> already on a paid Vercel plan the Storage tab works too.
 
 ## 3. Set environment variables
 
@@ -42,10 +46,9 @@ Vercel project → **Settings** → **Environment Variables**. Apply to
 | --- | --- |
 | `GITHUB_OAUTH_CLIENT_ID` | from step 1 |
 | `GITHUB_OAUTH_CLIENT_SECRET` | from step 1 |
+| `UPSTASH_REDIS_REST_URL` | from step 2 |
+| `UPSTASH_REDIS_REST_TOKEN` | from step 2 |
 | `TEAMCTX_BASE_URL` | `https://<your-deployment>.vercel.app` — no trailing slash |
-
-`KV_REST_API_URL` and `KV_REST_API_TOKEN` arrive from step 2; don't set them
-by hand.
 
 **Do not set** `TEAMCTX_ALLOW_URL_TOKENS`. It re-enables reading credentials
 from the query string, which is for local development only — the MCP spec
