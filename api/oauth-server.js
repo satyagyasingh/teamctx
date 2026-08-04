@@ -186,7 +186,15 @@ app.post('/settings/logout', async (req, res) => {
   const sid = readSessionId(req);
   if (sid) await kvDelete(keys.session(sid));
   res.setHeader('Set-Cookie', 'teamctx_sid=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
-  res.redirect(303, '/settings');
+  // Render the confirmation rather than redirecting to /settings: that page
+  // starts a fresh GitHub login, and GitHub re-approves an already-authorised
+  // app without prompting, so you would be signed straight back in.
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(shell('Signed out', `
+<h1>Signed out</h1>
+<p><a href="/settings">Sign in again</a></p>
+<p class="muted">To sign in as a different GitHub account, first revoke teamctx
+under <a href="https://github.com/settings/applications" target="_blank" rel="noreferrer">GitHub &rarr; Authorized OAuth Apps</a>.</p>`));
 });
 
 /**
