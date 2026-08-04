@@ -13,6 +13,7 @@
     { "source": "/register", "destination": "/api/oauth-server" },
     { "source": "/revoke", "destination": "/api/oauth-server" },
     { "source": "/oauth/:path*", "destination": "/api/oauth-server" },
-    { "source": "/settings", "destination": "/api/oauth-server" }
+    { "source": "/settings", "destination": "/api/oauth-server" },
+    { "source": "/settings/:path*", "destination": "/api/oauth-server" }
   ]
 }

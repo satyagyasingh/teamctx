@@ -2,7 +2,7 @@ import express from 'express';
 import { randomBytes } from 'crypto';
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { providerFromEnv, oauthConfigStatus, GITHUB_SCOPES, OAuthCallbackError } from '../src/oauth/provider.js';
-import { kvGet, kvSet, kvTake, keys, TTL, isPersistent } from '../src/oauth/kv.js';
+import { kvGet, kvSet, kvTake, kvDelete, keys, TTL, isPersistent } from '../src/oauth/kv.js';
 
 /**
  * Single Vercel function serving every OAuth surface. `vercel.json` rewrites
@@ -178,6 +178,18 @@ app.get('/settings', async (req, res) => {
 });
 
 /**
+ * Clear the browser session so the GitHub sign-in runs again. GitHub will
+ * re-approve without prompting; to switch accounts entirely, revoke teamctx
+ * under GitHub → Settings → Applications.
+ */
+app.post('/settings/logout', async (req, res) => {
+  const sid = readSessionId(req);
+  if (sid) await kvDelete(keys.session(sid));
+  res.setHeader('Set-Cookie', 'teamctx_sid=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
+  res.redirect(303, '/settings');
+});
+
+/**
  * Note the explicit 303s. Express defaults `res.redirect` to 302, and a 302
  * (like a 307) may preserve the request method — behind Vercel's rewrite layer
  * these surface as 307, which makes the browser re-POST to the redirect
@@ -237,12 +249,18 @@ button{margin-top:1.25rem;background:#1a1a1a;color:#fff;border:0;padding:.6rem 1
 @media(prefers-color-scheme:dark){button{background:#eee;color:#111}input,select{border-color:#444}}
 .ok{background:#e8f5e9;color:#1b5e20;padding:.6rem .8rem;border-radius:.4rem;margin:1rem 0}
 .muted{font-size:.85rem;color:#888}
+button.link{background:none;border:0;padding:0;margin:0 0 0 .5rem;color:#888;
+  font-size:.85rem;text-decoration:underline;cursor:pointer}
 code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}
 </style></head><body>${body}</body></html>`;
 
 const settingsPage = ({ user, hasKey, saved }) => shell('Settings', `
 <h1>teamctx settings</h1>
-<p>Signed in as <strong>${user.login}</strong>.</p>
+<p>Signed in as <strong>${user.login}</strong>.
+  <form method="POST" action="/settings/logout" style="display:inline;margin:0">
+    <button type="submit" class="link">Sign out</button>
+  </form>
+</p>
 ${saved ? '<div class="ok">Saved.</div>' : ''}
 <p class="muted">Your AI provider key is used only for the teamctx tools that call a
 model — <code>ask</code>, <code>contribute</code>, <code>reflect</code>,
