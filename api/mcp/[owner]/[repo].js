@@ -1,17 +1,28 @@
 import { handleMcpHttp } from '../../../mcp/http.js';
 import { runWithAiKey } from '../../../src/ai-context.js';
+import { providerFromEnv } from '../../../src/oauth/provider.js';
+import { kvGet, keys } from '../../../src/oauth/kv.js';
 
 /**
- * Vercel handler for hosted MCP.
+ * Hosted MCP endpoint.  POST /api/mcp/<owner>/<repo>
  *
- * URL shape: POST /api/mcp/<owner>/<repo>?gh_token=...&api_key=...&ref=...
+ * Credential resolution, in priority order:
  *
- * Vercel binds `<owner>` and `<repo>` into req.query via the file-path
- * segments `[owner]/[repo].js`. All other params come from the query string
- * (or matching X-* headers).
+ *   1. `Authorization: Bearer <token>` — the OAuth path. The token was minted
+ *      by our authorization server; we look it up to recover the user's
+ *      GitHub token and their stored AI provider key. This is the only path
+ *      claude.ai and other web clients will use.
  *
- * MVP: PAT + Anthropic key travel in the query string. A GitHub App / OAuth
- * flow is a follow-up so tokens are not URL-visible.
+ *   2. `X-Github-Token` / `X-Anthropic-Api-Key` headers — for Claude's
+ *      `static_headers` mode and for local development.
+ *
+ *   3. `?gh_token=&api_key=` query params — legacy, local development only.
+ *      Disabled unless TEAMCTX_ALLOW_URL_TOKENS=1, because the MCP spec
+ *      prohibits credentials in the query string and Claude ignores them.
+ *
+ * With no usable credential we return 401 plus a WWW-Authenticate header
+ * pointing at this repo's protected resource metadata, which is what starts
+ * the OAuth flow in the client.
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -29,16 +40,41 @@ export default async function handler(req, res) {
     return;
   }
 
-  const ghToken = readParam(req, 'gh_token') || req.headers['x-github-token'];
-  const apiKey = readParam(req, 'api_key') || req.headers['x-anthropic-api-key'];
-  const ref = readParam(req, 'ref') || null;
+  let ghToken = null;
+  let apiKey = null;
 
-  if (!ghToken) {
-    res.statusCode = 401;
-    res.end(JSON.stringify({ error: 'missing_gh_token', message: 'gh_token query param (or X-Github-Token header) is required' }));
-    return;
+  // 1 — OAuth bearer token
+  const bearer = readBearer(req);
+  if (bearer) {
+    const provider = providerFromEnv();
+    if (!provider) return unauthorized(req, res, owner, repo, 'OAuth is not configured on this deployment');
+    try {
+      const auth = await provider.verifyAccessToken(bearer);
+      ghToken = auth.extra?.githubToken ?? null;
+      const stored = auth.extra?.githubUser?.id
+        ? await kvGet(keys.aiKey(auth.extra.githubUser.id))
+        : null;
+      apiKey = stored?.apiKey ?? null;
+    } catch {
+      return unauthorized(req, res, owner, repo, 'The access token is invalid or has expired');
+    }
   }
 
+  // 2 — request headers
+  if (!ghToken) ghToken = firstHeader(req, 'x-github-token');
+  if (!apiKey) apiKey = firstHeader(req, 'x-anthropic-api-key') || firstHeader(req, 'x-api-key');
+
+  // 3 — query params (opt-in, local dev)
+  if (process.env.TEAMCTX_ALLOW_URL_TOKENS === '1') {
+    if (!ghToken) ghToken = readParam(req, 'gh_token');
+    if (!apiKey) apiKey = readParam(req, 'api_key');
+  }
+
+  if (!ghToken) {
+    return unauthorized(req, res, owner, repo, 'Authentication required');
+  }
+
+  const ref = readParam(req, 'ref') || null;
   const projectContext = { __backend: 'github', owner, repo, ref, ghToken };
 
   const dispatch = () => handleMcpHttp(req, res, projectContext);
@@ -46,8 +82,46 @@ export default async function handler(req, res) {
   else await dispatch();
 }
 
+/**
+ * A 401 here is what kicks off OAuth in the client, so the WWW-Authenticate
+ * header has to be exactly right: Claude does not honour it on a 200, and the
+ * `resource` in the metadata document must match this URL including its path.
+ */
+function unauthorized(req, res, owner, repo, description) {
+  const base = baseUrl(req);
+  const prm = `${base}/.well-known/oauth-protected-resource/api/mcp/${owner}/${repo}`;
+  res.statusCode = 401;
+  res.setHeader('WWW-Authenticate',
+    `Bearer realm="teamctx", resource_metadata="${prm}", scope="mcp:tools"`);
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({
+    error: 'unauthorized',
+    error_description: description,
+    resource_metadata: prm,
+  }));
+}
+
+function baseUrl(req) {
+  if (process.env.TEAMCTX_BASE_URL) return process.env.TEAMCTX_BASE_URL.replace(/\/$/, '');
+  const host = firstHeader(req, 'x-forwarded-host') || firstHeader(req, 'host');
+  const proto = firstHeader(req, 'x-forwarded-proto') || 'https';
+  return `${proto}://${host}`;
+}
+
+function firstHeader(req, name) {
+  const v = req.headers?.[name];
+  return Array.isArray(v) ? v[0] : (v || null);
+}
+
 function readParam(req, name) {
   const v = req.query?.[name];
   if (Array.isArray(v)) return v[0];
   return v || undefined;
+}
+
+function readBearer(req) {
+  const raw = firstHeader(req, 'authorization');
+  if (!raw) return null;
+  const m = /^Bearer\s+(.+)$/i.exec(raw.trim());
+  return m ? m[1] : null;
 }
