@@ -1,4 +1,4 @@
-import { readConfig, readWorkstreamMd, readRoleFile, readWorkstream, readContributions } from '../../src/storage.js';
+import { readConfig, readWorkstreamMd, readRoleFile, readWorkstream, readContributions, listTasks } from '../../src/storage.js';
 import { answerQuestion } from '../../src/context.js';
 
 export async function askCommand(question, opts) {
@@ -20,9 +20,10 @@ export async function askCommand(question, opts) {
   const sharedMd = readWorkstreamMd(resolvedId);
   const workstream = readWorkstream(resolvedId);
   const contributions = readContributions();
+  const openTasks = listTasks({ workstream: resolvedId }).filter(t => t.status === 'open');
 
   const answer = await answerQuestion({
-    sharedMd, roleMd, question, config,
+    sharedMd, roleMd, question, config, openTasks,
     workstream, contributions, audit: !!opts.audit,
   });
   console.log(`\n${answer}\n`);
