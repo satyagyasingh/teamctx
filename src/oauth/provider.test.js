@@ -209,6 +209,22 @@ describe('token exchange', () => {
       provider.exchangeAuthorizationCode({ client_id: 'someone-else' }, code), 'invalid_grant');
   });
 
+  it('refuses a redirect_uri that differs from the authorization request', async () => {
+    const provider = makeProvider();
+    const { code } = await runAuthFlow(provider, { fetchMock: githubHappyPath() });
+    await expectOAuthError(
+      provider.exchangeAuthorizationCode(CLIENT, code, 'verifier', 'https://evil.example/cb'),
+      'invalid_grant');
+  });
+
+  it('accepts the matching redirect_uri', async () => {
+    const provider = makeProvider();
+    const { code } = await runAuthFlow(provider, { fetchMock: githubHappyPath() });
+    const tokens = await provider.exchangeAuthorizationCode(
+      CLIENT, code, 'verifier', CLIENT.redirect_uris[0]);
+    expect(tokens.access_token).toBeTruthy();
+  });
+
   it('rotates the refresh token and invalidates the old one', async () => {
     const provider = makeProvider();
     const { code } = await runAuthFlow(provider, { fetchMock: githubHappyPath() });

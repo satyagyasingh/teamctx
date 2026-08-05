@@ -179,12 +179,19 @@ export class TeamctxOAuthProvider {
     return record.codeChallenge;
   }
 
-  async exchangeAuthorizationCode(client, authorizationCode, _codeVerifier, _redirectUri, _resource) {
+  async exchangeAuthorizationCode(client, authorizationCode, _codeVerifier, redirectUri, _resource) {
     // One-shot: consuming the code here prevents replay.
     const record = await kvTake(keys.code(authorizationCode));
     if (!record) throw new InvalidGrantError('Authorization code not found or expired');
     if (record.clientId !== client.client_id) {
       throw new InvalidGrantError('Authorization code was issued to a different client');
+    }
+    // RFC 6749 §4.1.3 / OAuth 2.1 §4.1.3: redirect_uri must match the one sent
+    // to /authorize. PKCE already covers the practical attack; this is
+    // defense-in-depth. Only enforced when the client sends the parameter,
+    // which is what the spec requires of it.
+    if (redirectUri !== undefined && redirectUri !== null && redirectUri !== record.redirectUri) {
+      throw new InvalidGrantError('redirect_uri does not match the authorization request');
     }
     return this.#issueTokens({
       clientId: client.client_id,

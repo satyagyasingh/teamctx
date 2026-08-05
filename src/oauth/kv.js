@@ -100,9 +100,28 @@ export async function kvDelete(key, env = process.env) {
  * pending-authorization state) so they can't be replayed.
  */
 export async function kvTake(key, env = process.env) {
-  const value = await kvGet(key, env);
-  if (value !== null) await kvDelete(key, env);
-  return value;
+  const cfg = restConfig(env);
+  if (!cfg) {
+    // In-memory: read and delete happen in one synchronous turn, so no
+    // interleaving is possible.
+    const value = memGet(key);
+    if (value !== null) memory.delete(key);
+    return value;
+  }
+  // GETDEL is a single round trip, so two concurrent exchanges of the same
+  // code cannot both see it. Redis < 6.2 lacks the command — fall back to the
+  // non-atomic pair rather than failing the request outright.
+  let raw;
+  try {
+    raw = await restCommand(cfg, ['GETDEL', key]);
+  } catch {
+    const value = await kvGet(key, env);
+    if (value !== null) await kvDelete(key, env);
+    return value;
+  }
+  if (raw === null || raw === undefined) return null;
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; }
+  catch { return raw; }
 }
 
 // --- key namespaces -----------------------------------------------------
