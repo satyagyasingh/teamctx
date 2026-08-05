@@ -12,6 +12,7 @@ import {
   readContributions,
 } from '../src/storage.js';
 import { answerQuestion } from '../src/context.js';
+import { migrateIfNeeded } from '../src/migrate.js';
 import { initProject } from '../cli/commands/init.core.js';
 import {
   listPendingReviews, approveReview, rejectReview,
@@ -336,8 +337,16 @@ function reportBackContribute(r) {
 }
 
 export function makeHandlers(projectRoot) {
-  const dir = () => getTeamctxDir(projectRoot);
   // Some tools (init) run before .teamctx/ exists, so they take projectRoot directly.
+  let migrated = false;
+  const dir = () => {
+    const teamctxDir = getTeamctxDir(projectRoot);
+    if (!migrated) {
+      try { migrateIfNeeded(teamctxDir); } catch { /* best-effort */ }
+      migrated = true;
+    }
+    return teamctxDir;
+  };
 
   return {
     async get_context() {
