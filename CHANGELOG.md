@@ -13,6 +13,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   guides for Claude Code, Cursor, and ChatGPT. Copy-paste prompts that shape
   rough notes into well-formed contributions and clean up the shared tree
   before running `teamctx reflect`.
+- **Tasks as first-class objects**: track units of work alongside Whys, Roles,
+  and Decisions. `teamctx task add / list / show / done / reopen / assign / rm`
+  are all cheap local file ops (no AI). Tasks live inline on their workstream
+  file at `.teamctx/workstreams/<ws>.json` under a `tasks` array. A
+  workstream without the field is treated as empty — no migration required.
+- **On-demand task prompt compile**: `teamctx task compile <id> [--role <slug>]
+  [--force]` generates an AI-ready markdown prompt file at
+  `.teamctx/context/tasks/<task-id>.md`. Compile is the one command that
+  costs an AI call. Skips re-compile if the workstream is unchanged since
+  the last `compiledAt`; `--force` overrides.
+- **`teamctx status`** now shows a `Tasks: N open, M done (K compiled)`
+  line so the count is visible without opening any file.
+- **`teamctx ask`** grounds against open tasks in the target workstream, so
+  answers can reference in-flight work.
+- **Docs**: `docs/tasks.md` — end-to-end explainer with the compiled file
+  shape and command reference.
+
+### Not shipping (deliberate)
+- No MCP surface for tasks in this release — the CLI shape should settle
+  first. A follow-up PR will expose `list_tasks`, `task_add`, `task_done`,
+  `task_compile`, etc.
+- No auto-regeneration of compiled task files on tree changes.
+- No due dates, priorities, dependencies, or cross-workstream tasks.
 
 ## [0.2.0] - 2026-07-21
 
@@ -55,10 +78,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.teamctx/workstreams/main.json` (and `context/shared.md` →
   `context/workstreams/main.md`) on first run against an existing project.
 
+### Fixed
+- **Queue + workstream:** `contribute --workstream <id>` now persists the target
+  workstream on the queue item (and on the contribution audit log). Previously
+  the target was silently lost between enqueue and approve.
+- **Review approve + workstream:** `review approve <id>` now applies operations
+  to the queue item's target workstream (defaulting to `main` for legacy queue
+  items), regenerates only the role files bound to that workstream, and threads
+  contributions into `serializeToMd` / `generateRoleFile` so decision markers
+  render on approved contributions. Previously it always wrote to `main` and
+  overwrote every role file — corrupting role files bound to other workstreams.
+- **Snapshots + workstream:** `snapshot create` now captures every workstream
+  in the project as an array on the snapshot object. Legacy snapshots with the
+  old `shared` field still load and display as a single-workstream snapshot on
+  `main`. Previously only `main` was captured — post-split projects produced
+  empty snapshots.
+- **MCP + workstream:** `submit_contribution` gained an optional `workstream`
+  arg (defaulting to active workstream, then `main`); it now filters role-file
+  regeneration to roles bound to the target and records `workstream` +
+  `source: mcp` on the audit log. Two new read-only tools added for discovery:
+  `list_workstreams` and `get_workstream({id})`. `teamctx status` now shows a
+  per-workstream Why-node breakdown after migration and the active provider.
+
 ### Changed
 - `teamctx contribute` no longer applies to shared context on submission by
   default — it enqueues under `.teamctx/queue/` and prints the review command.
   Pass `--apply` to keep the old behaviour.
+- **MCP `get_context` response shape** is now `{workstreams: [{id, tree}, ...]}`
+  (whole-workspace) instead of a single tree. This is an intentional breaking
+  change for MCP callers — keeping the main-only response would silently
+  mislead callers in workstream-migrated projects. Adapt: read
+  `data.workstreams[0].tree.whys` instead of `data.whys`, or call
+  `get_workstream({id: 'main'})` for the single-tree shape.
 
 ## [0.1.0] - 2026-06-14
 
