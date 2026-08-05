@@ -12,6 +12,7 @@ import {
   readContributions,
 } from '../src/storage.js';
 import { answerQuestion } from '../src/context.js';
+import { migrateIfNeeded } from '../src/migrate.js';
 import { initProject } from '../cli/commands/init.core.js';
 import {
   listPendingReviews, approveReview, rejectReview,
@@ -341,8 +342,18 @@ export function makeHandlers(projectRoot) {
   // dispatch ignores the `dir` arg and pulls from the ambient GithubSession
   // (see src/session-context.js), so any truthy placeholder here is fine.
   const isHosted = typeof projectRoot === 'object' && projectRoot?.__backend === 'github';
-  const dir = () => isHosted ? projectRoot : getTeamctxDir(projectRoot);
   // Some tools (init) run before .teamctx/ exists, so they take projectRoot directly.
+  // migrateIfNeeded touches the filesystem directly, so it only runs locally.
+  let migrated = false;
+  const dir = () => {
+    if (isHosted) return projectRoot;
+    const teamctxDir = getTeamctxDir(projectRoot);
+    if (!migrated) {
+      try { migrateIfNeeded(teamctxDir); } catch { /* best-effort */ }
+      migrated = true;
+    }
+    return teamctxDir;
+  };
 
   return {
     async get_context() {

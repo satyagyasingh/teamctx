@@ -33,6 +33,10 @@ vi.mock('../src/context.js', () => ({
   answerQuestion: vi.fn(),
 }));
 
+vi.mock('../src/migrate.js', () => ({
+  migrateIfNeeded: vi.fn(() => false),
+}));
+
 vi.mock('../src/git.js', () => ({
   commitContext: vi.fn(),
   pushContext: vi.fn(),
@@ -47,6 +51,7 @@ import {
   appendContribution,
 } from '../src/storage.js';
 import { updateShared, generateRoleFile, answerQuestion } from '../src/context.js';
+import { migrateIfNeeded } from '../src/migrate.js';
 import { commitContext, pushContext } from '../src/git.js';
 
 const baseWs = { id: 'main', name: 'Demo', whys: [] };
@@ -137,6 +142,33 @@ describe('buildServer', () => {
     expect(server).toBeTruthy();
     expect(typeof server.connect).toBe('function');
     expect(getTeamctxDir).not.toHaveBeenCalled();
+  });
+});
+
+describe('makeHandlers — legacy shared.json migration', () => {
+  it('runs migrateIfNeeded on the first tool call so MCP-only projects auto-migrate', async () => {
+    readConfig.mockReturnValue(baseConfig);
+    readWorkstream.mockReturnValue(baseWs);
+    listWorkstreamIds.mockReturnValue(['main']);
+
+    const handlers = makeHandlers(ROOT);
+    expect(migrateIfNeeded).not.toHaveBeenCalled();
+
+    await handlers.get_context({});
+    expect(migrateIfNeeded).toHaveBeenCalledWith(TDIR);
+    expect(migrateIfNeeded).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-run migrateIfNeeded on subsequent tool calls in the same process', async () => {
+    readConfig.mockReturnValue(baseConfig);
+    readWorkstream.mockReturnValue(baseWs);
+    listWorkstreamIds.mockReturnValue(['main']);
+
+    const handlers = makeHandlers(ROOT);
+    await handlers.get_context({});
+    await handlers.get_context({});
+    await handlers.list_workstreams({});
+    expect(migrateIfNeeded).toHaveBeenCalledTimes(1);
   });
 });
 
