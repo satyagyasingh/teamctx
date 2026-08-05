@@ -26,7 +26,11 @@ function sourceTag(node) {
   return ids.length ? `  [sources: ${ids.join(', ')}]` : '';
 }
 
-export function serializeToMd(workstream, projectName, lastUpdatedBy = '', contributions = [], { includeSourceTags = false } = {}) {
+// `includeSourceTags` annotates each node with `[sources: c-x]` for the ask
+// prompt; `includeContributors` appends the `## Contributors` roll-up. The
+// roll-up belongs in the markdown we write to disk, not in prompts we send to
+// the AI, so prompt builders pass `includeContributors: false`.
+export function serializeToMd(workstream, projectName, lastUpdatedBy = '', contributions = [], { includeSourceTags = false, includeContributors = true } = {}) {
   const now = new Date().toISOString().split('T')[0];
   const byLine = lastUpdatedBy ? ` · Source: ${lastUpdatedBy} contribution` : '';
   const header = `# Project Context — ${projectName}\n*Last updated: ${now}${byLine}*\n\n## Why / What / How\n\n`;
@@ -49,7 +53,7 @@ export function serializeToMd(workstream, projectName, lastUpdatedBy = '', contr
     return out;
   }).join('');
 
-  if (includeSourceTags) return header + tree;
+  if (includeSourceTags || !includeContributors) return header + tree;
   const contributorsSection = formatContributorsSection(collectContributorCounts(workstream, contributions));
   return header + tree + (contributorsSection ? `\n${contributorsSection}` : '');
 }
@@ -67,7 +71,7 @@ export async function updateShared(workstream, contribution, config) {
 }
 
 export async function generateRoleFile(workstream, role, projectName, config, contributions = []) {
-  const tree = serializeToMd(workstream, projectName, '', contributions);
+  const tree = serializeToMd(workstream, projectName, '', contributions, { includeContributors: false });
   const now = new Date().toISOString().split('T')[0];
 
   const prompt = [
@@ -108,7 +112,7 @@ export async function generateRoleFile(workstream, role, projectName, config, co
 
 export async function compileTaskPrompt({ task, workstream, role, contributions, config }) {
   const projectName = config?.project || workstream?.name || 'project';
-  const tree = serializeToMd(workstream, projectName, '', contributions);
+  const tree = serializeToMd(workstream, projectName, '', contributions, { includeContributors: false });
   const now = new Date().toISOString().split('T')[0];
   const roleLine = role ? `Framed for role: ${role.name} — ${role.responsibilities || ''}` : 'No role filter — write for a general team member.';
   const decisionsList = (contributions || [])
@@ -155,7 +159,7 @@ export async function compileTaskPrompt({ task, workstream, role, contributions,
 }
 
 export async function generateReflection(workstream, contributions, config) {
-  const tree = serializeToMd(workstream, workstream.name, '', contributions);
+  const tree = serializeToMd(workstream, workstream.name, '', contributions, { includeContributors: false });
   const recent = contributions.slice(-20).map(c => `- ${c.author}: "${c.text}"`).join('\n') || '(none yet)';
   const system = 'You are improving a team context record. Output STRICT JSON only — no markdown fences.';
 
@@ -247,13 +251,17 @@ export function normalizeSubworkstreamProposal(parsed, whys) {
   return { splits, leftover };
 }
 
-const CITATIONS_HEADING = /\n{1,2}##\s*Citations\s*:?\s*/i;
+const CITATIONS_HEADING = /\n{1,2}##\s*Citations\s*:?\s*/gi;
 const CITATION_INSTRUCTION = 'The tree in the context is annotated with inline "[sources: c-x, c-y]" tags on each node. Do NOT include those "[sources: ...]" tags in your answer text — they are metadata for you, not the reader. Instead, at the very end of your answer, on its own line, output exactly "## Citations: id1, id2, id3" listing the contribution ids whose text materially informed your answer, most-important first. If none apply, output "## Citations: none".';
 
 function parseCitations(answer) {
   if (!answer) return { body: answer, citedIds: [] };
-  const match = answer.match(CITATIONS_HEADING);
-  if (!match) return { body: answer, citedIds: [] };
+  // The block we want is the one the AI appends last. Anchoring on the first
+  // match would let a contribution that quotes "## Citations:" truncate the
+  // answer and supply a bogus id list.
+  const matches = [...answer.matchAll(CITATIONS_HEADING)];
+  if (matches.length === 0) return { body: answer, citedIds: [] };
+  const match = matches[matches.length - 1];
   const idx = match.index;
   const body = answer.slice(0, idx).trimEnd();
   const tail = answer.slice(idx + match[0].length).trim();
