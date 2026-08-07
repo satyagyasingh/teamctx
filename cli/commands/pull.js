@@ -45,6 +45,7 @@ export async function pullCommand() {
 
     if (answer.toLowerCase() === 'y') {
       const config = readConfig();
+      const { me } = await currentIdentity(config);
       const text = item.author && item.author !== me
         ? `[From ${item.author}] ${item.text}`
         : item.text;
