@@ -57,10 +57,13 @@ export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
     if (!v) {
       await writePrefs(actor, { name: null }, teamctxDir);
       const restored = await resolveIdentity({ actor, config, teamctxDir });
-      return { key, value: restored.name, notes: [`override cleared — your name is derived again (from: ${restored.source}).`] };
+      return {
+        key, value: restored.name, cleared: true,
+        notes: [`override cleared — your name is derived again (from: ${restored.source}).`],
+      };
     }
     await writePrefs(actor, { name: v }, teamctxDir);
-    return { key, value: v, notes: ['personal setting — stored against you, not written to the repo.'] };
+    return { key, value: v, cleared: false, notes: ['personal setting — stored against you, not written to the repo.'] };
   }
   if (!WRITABLE.has(key)) throw new UnknownConfigKeyError(key);
   const config = readConfig(teamctxDir);

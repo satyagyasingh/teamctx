@@ -622,7 +622,13 @@ export function makeHandlers(projectRoot) {
     async config_set({ key, value }) {
       const r = await setConfig({ key, value, teamctxDir: dir(), projectDir: gitCwd });
       const notes = r.notes.length ? ` Notes: ${r.notes.join(' | ')}` : '';
-      return textResult({ ...r, reportBack: `Tell the user: config.${r.key} set to ${JSON.stringify(r.value)}.${notes}` });
+      // Clearing is not setting. A client that surfaces only reportBack would
+      // otherwise tell the user their name was set to the very value they just
+      // removed the override for.
+      const what = r.cleared
+        ? `config.${r.key} override cleared — it is derived again, currently ${JSON.stringify(r.value)}.`
+        : `config.${r.key} set to ${JSON.stringify(r.value)}.`;
+      return textResult({ ...r, reportBack: `Tell the user: ${what}${notes}` });
     },
   };
 }

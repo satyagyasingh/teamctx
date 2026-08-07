@@ -584,3 +584,25 @@ describe('get_config redaction', () => {
     expect(payload.apiKey).toBeUndefined();
   });
 });
+
+
+describe('config_set — personal keys', () => {
+  it('reports a cleared override as cleared, not as a set', async () => {
+    // A client that surfaces only reportBack would otherwise tell the user
+    // their name was set to the value they just stopped overriding.
+    readConfig.mockReturnValue({ ...baseConfig, roles: [] });
+    const handlers = makeHandlers(ROOT);
+    const r = JSON.parse((await handlers.config_set({ key: 'name', value: '' })).content[0].text);
+    expect(r.cleared).toBe(true);
+    expect(r.reportBack).toMatch(/override cleared/);
+    expect(r.reportBack).not.toMatch(/set to/);
+  });
+
+  it('reports a set as a set', async () => {
+    readConfig.mockReturnValue({ ...baseConfig, roles: [] });
+    const handlers = makeHandlers(ROOT);
+    const r = JSON.parse((await handlers.config_set({ key: 'name', value: 'satya' })).content[0].text);
+    expect(r.cleared).toBe(false);
+    expect(r.reportBack).toMatch(/config\.name set to "satya"/);
+  });
+});
