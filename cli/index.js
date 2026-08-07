@@ -30,6 +30,7 @@ import {
 } from './commands/task.js';
 import { getTeamctxDir } from '../src/storage.js';
 import { migrateIfNeeded } from '../src/migrate.js';
+import { runWithActor } from '../src/actor.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
@@ -152,7 +153,10 @@ function formatError(err) {
   return raw.split('\n')[0];
 }
 
-program.parseAsync().catch(err => {
+// One actor context for the whole command. resolveActor memoizes inside this
+// scope, so identity is worked out once instead of once per call site — some
+// commands ask three times, and each miss costs two git subprocesses.
+runWithActor(null, () => program.parseAsync()).catch(err => {
   console.error(`\nError: ${formatError(err)}\n`);
   process.exit(1);
 });
