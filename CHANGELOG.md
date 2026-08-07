@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the chosen handle as the initializer's own preference.
 
 ### Fixed
+- `teamctx pull` threw a `ReferenceError` when applying a contribution from
+  another author — it compared against an undefined `me`.
 - A saved AI provider key was applied against the provider named in the
   project's shared config rather than the one it belongs to — an OpenAI key
   was handed to the Anthropic client. The stored provider now travels with
