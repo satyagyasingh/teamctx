@@ -132,7 +132,9 @@ task.command('compile <id>').description('Generate an AI-ready prompt file for t
   .action(taskCompileCommand);
 
 const config = program.command('config').description('View or change project settings');
-config.command('name [value]').description('Get or set your own display name on contributions (personal; not committed)').action(configNameCommand);
+config.command('name [value]').description('Get or set your own display name on contributions (personal; not committed)')
+  .option('--clear', 'Drop the override and derive the name from your identity again')
+  .action(configNameCommand);
 config.command('provider [value]').description('Get or set the AI provider (anthropic|openai|gemini)').action(configProviderCommand);
 config.command('model [value]').description('Get or set the AI model').action(configModelCommand);
 config.command('github-raw-base [value]').description('Get or set the GitHub raw base URL').action(configGithubRawBaseCommand);

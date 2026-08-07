@@ -17,8 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a gitignored `.teamctx/.local/prefs.json` locally.
 - `config_set name` / `teamctx config name` sets the display name used on your
   own contributions. Personal: it is stored against you and never written to
-  the repo. Passing an empty value clears the override so the name is derived
-  from your identity again — and keeps following it if that identity changes.
+  the repo. `teamctx config name --clear` drops the override so the name is
+  derived from your identity again — and keeps following it if that identity
+  changes. (A flag rather than an empty string: PowerShell discards `""`
+  before the process sees it.)
 - Contributions now carry an `authorKey` alongside `author`, so one person is
   counted once in the `## Contributors` roll-up even when their display name
   differs between the CLI (git name) and the hosted server (GitHub name).

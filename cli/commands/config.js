@@ -142,19 +142,28 @@ export async function configDeployUrlCommand(value) {
  * against you under .teamctx/.local/ and never committed, so setting it does
  * not rename anyone else.
  */
-export async function configNameCommand(value) {
+export async function configNameCommand(value, opts = {}) {
   const config = readConfig();
   const actor = await resolveActor({ config });
-  if (value === undefined) {
+
+  // `--clear` rather than an empty string: PowerShell drops `""` before the
+  // process ever sees it, so an empty argument is indistinguishable from no
+  // argument at all and there was no way to clear the override on Windows.
+  const clearing = opts.clear === true
+    || value === '""' || value === "''"
+    || (value !== undefined && String(value).trim() === '');
+
+  if (value === undefined && !clearing) {
     const current = await resolveIdentity({ actor, config });
     console.log(`\nYour name on contributions: ${current.name} (from: ${current.source})`);
     console.log('\nUsage: teamctx config name <your name>');
-    console.log('       teamctx config name ""   — clear the override and derive it again');
+    console.log('       teamctx config name --clear   — drop the override and derive it again');
     return;
   }
-  // Empty clears the override rather than storing a blank, so the name goes
-  // back to being derived — and keeps following the identity if it changes.
-  const next = (value === '""' || value === "''" ? '' : String(value)).trim();
+
+  // Clearing removes the preference rather than storing a blank, so the name
+  // is derived again — and keeps following the identity if it changes.
+  const next = clearing ? '' : String(value).trim();
   if (!next) {
     await writePrefs(actor, { name: null }, undefined);
     const restored = await resolveIdentity({ actor, config });
