@@ -5,9 +5,16 @@ import {
 import { applyQueueItem, buildRejected, canApprove } from '../../src/review.js';
 import { serializeToMd, generateRoleFile } from '../../src/context.js';
 import { commitContext, pushContext } from '../../src/git.js';
+import { resolveActor } from '../../src/actor.js';
+import { resolveDisplayName } from '../../src/prefs.js';
 
 function workstreamDisplayName(id, workstream, config) {
   return config.workstreams?.find(w => w.id === id)?.name || workstream.name || config.project;
+}
+
+async function currentActorName(config, teamctxDir, projectDir) {
+  const actor = await resolveActor({ config, cwd: projectDir });
+  return resolveDisplayName({ actor, config, teamctxDir });
 }
 
 export class ManagerGateError extends Error {
@@ -38,7 +45,11 @@ export async function listPendingReviews({ teamctxDir } = {}) {
 
 export async function approveReview({ id, teamctxDir, projectDir, actor } = {}) {
   const config = readConfig(teamctxDir);
-  assertManager(config, { actor });
+  // Without this the gate falls back to `config.me` — the same shared string on
+  // both sides of the comparison — so on a multi-user deployment it either lets
+  // everyone through or nobody, depending on who happened to run `init`.
+  const who = actor || await currentActorName(config, teamctxDir, projectDir);
+  assertManager(config, { actor: who });
 
   let item;
   try { item = readQueueItem(id, teamctxDir); }
@@ -68,7 +79,7 @@ export async function approveReview({ id, teamctxDir, projectDir, actor } = {}) 
 
   const note = item.tagged === 'decision' ? ' [decision]' : '';
   const wsNote = targetId === 'main' ? '' : ` (${targetId})`;
-  const approvedBy = actor || config.me;
+  const approvedBy = who;
   await commitContext(
     `context: ${item.author} contribution (approved by ${approvedBy})${note}${wsNote}`,
     projectDir ? { cwd: projectDir } : undefined,
@@ -94,13 +105,13 @@ export async function approveReview({ id, teamctxDir, projectDir, actor } = {}) 
 
 export async function rejectReview({ id, reason, teamctxDir, projectDir, actor } = {}) {
   const config = readConfig(teamctxDir);
-  assertManager(config, { actor });
+  const rejectedBy = actor || await currentActorName(config, teamctxDir, projectDir);
+  assertManager(config, { actor: rejectedBy });
 
   let item;
   try { item = readQueueItem(id, teamctxDir); }
   catch { throw new QueueItemNotFoundError(id); }
 
-  const rejectedBy = actor || config.me;
   writeRejected(buildRejected(item, rejectedBy, reason), teamctxDir);
   deleteQueueItem(item.id, teamctxDir);
 

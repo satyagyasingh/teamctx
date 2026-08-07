@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Per-user settings.** Identity and the active workstream are now resolved
+  per person instead of being read from the committed `.teamctx/config.json`.
+  A new actor context (`src/actor.js`) resolves who is calling — the GitHub
+  account that completed OAuth on the hosted server, `git config user.name`
+  on the CLI and stdio MCP, falling back to `config.me` — and a preference
+  store (`src/prefs.js`) keeps their choices out of the repo: KV when hosted,
+  a gitignored `.teamctx/.local/prefs.json` locally.
+- `config_set name` sets the display name used on your own contributions.
+  Personal: it is stored against you and never written to the repo.
+- Contributions now carry an `authorKey` alongside `author`, so one person is
+  counted once in the `## Contributors` roll-up even when their display name
+  differs between the CLI (git name) and the hosted server (GitHub name).
+
+### Changed
+- `workstream_use` / `teamctx workstream use` now records a personal
+  preference. It no longer writes `activeWorkstream` to the shared config, and
+  no longer creates a commit — switching workstream stopped moving everyone
+  else's default. `config.activeWorkstream` remains the project default for
+  anyone who has not switched, so existing projects behave as before.
+- `get_status` and `get_config` return `me` and `activeWorkstream` resolved
+  for the calling user, with the repo's values under `projectDefaults`.
+- `teamctx init` pre-fills the name prompt from the git identity and records
+  the chosen handle as the initializer's own preference.
+
+### Fixed
+- A saved AI provider key was applied against the provider named in the
+  project's shared config rather than the one it belongs to — an OpenAI key
+  was handed to the Anthropic client. The stored provider now travels with
+  the key, and the model follows it.
+- Approving or rejecting on the hosted server compared `config.me` against
+  `config.manager` — both read from the same shared file — so the gate let
+  everyone through or nobody, depending on who ran `init`. It now compares
+  against the caller.
+
 ## [0.3.0] - 2026-08-07
 
 ### Added

@@ -42,6 +42,25 @@ vi.mock('../src/git.js', () => ({
   pushContext: vi.fn(),
 }));
 
+// Identity and preferences are resolved from the environment (git subprocess,
+// KV, a local file). Stub them so these stay unit tests.
+vi.mock('../src/actor.js', () => ({
+  resolveActor: vi.fn(async () => ({ key: 'git:alice@example.com', name: 'alice', login: null, source: 'git' })),
+  actorFromGithubUser: vi.fn(),
+  actorFromGit: vi.fn(),
+  actorFromConfig: vi.fn(),
+  runWithActor: vi.fn((seed, fn) => fn()),
+  peekActor: vi.fn(() => null),
+}));
+
+vi.mock('../src/prefs.js', () => ({
+  readPrefs: vi.fn(async () => ({})),
+  writePrefs: vi.fn(async (actor, patch) => patch),
+  resolveActiveWorkstream: vi.fn(async ({ config }) => config?.activeWorkstream || 'main'),
+  resolveDisplayName: vi.fn(async ({ actor, config }) => actor?.name || config?.me || 'unknown'),
+  ensureGitignored: vi.fn(),
+}));
+
 import { TOOLS, makeHandlers, buildServer, resolveProjectDir } from './server.js';
 import {
   getTeamctxDir,
@@ -53,6 +72,7 @@ import {
 import { updateShared, generateRoleFile, answerQuestion } from '../src/context.js';
 import { migrateIfNeeded } from '../src/migrate.js';
 import { commitContext, pushContext } from '../src/git.js';
+import { writePrefs } from '../src/prefs.js';
 
 const baseWs = { id: 'main', name: 'Demo', whys: [] };
 const baseConfig = { project: 'Demo', me: 'alice', model: 'claude-sonnet-4-6', roles: [], autoPush: false, workstreams: [{ id: 'main', name: 'Demo' }] };
@@ -117,7 +137,9 @@ describe('TOOLS list', () => {
   });
 
   it('every Tier 2 (risky) tool warns in its description', () => {
-    const risky = ['init', 'role_add', 'role_assign', 'workstream_split', 'workstream_use',
+    // workstream_use is deliberately absent: it now writes only the caller's own
+    // preference, touching neither the repo nor anyone else's view.
+    const risky = ['init', 'role_add', 'role_assign', 'workstream_split',
                    'review_approve', 'review_reject', 'snapshot_create', 'snapshot_approve',
                    'snapshot_reject', 'reflect', 'config_set'];
     for (const name of risky) {
@@ -507,11 +529,17 @@ describe('snapshot_create + snapshot_approve', () => {
 });
 
 describe('workstream_use', () => {
-  it('writes the activeWorkstream and returns a reportBack', async () => {
+  it('stores the choice as a personal preference, not in the shared config', async () => {
     readConfig.mockReturnValue({ ...baseConfig, workstreams: [{ id: 'main' }, { id: 'tech' }], roles: [] });
     const handlers = makeHandlers(ROOT);
     const result = await handlers.workstream_use({ id: 'tech' });
-    expect(writeConfig).toHaveBeenCalledWith(expect.objectContaining({ activeWorkstream: 'tech' }), TDIR);
+    expect(writePrefs).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'git:alice@example.com' }),
+      { activeWorkstream: 'tech' },
+      TDIR,
+    );
+    // The whole point: switching must not write to the file everyone shares.
+    expect(writeConfig).not.toHaveBeenCalled();
     expect(JSON.parse(result.content[0].text).reportBack).toMatch(/active workstream is now "tech"/);
   });
 

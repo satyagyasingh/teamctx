@@ -1,5 +1,7 @@
 import { readConfig, writeConfig } from '../../src/storage.js';
 import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
+import { resolveActor } from '../../src/actor.js';
+import { writePrefs, resolveDisplayName, resolveActiveWorkstream } from '../../src/prefs.js';
 
 const ALIASES = {
   opus: 'claude-opus-4-7',
@@ -15,25 +17,44 @@ const PROVIDER_KEYS = {
 
 const WRITABLE = new Set(['provider', 'model', 'githubRawBase', 'manager', 'managerEmail', 'deployUrl', 'autoPush']);
 
+/**
+ * Keys that describe the person rather than the project. They are stored
+ * against the caller (see src/prefs.js) and never written to the repo, so one
+ * teammate setting them does not change what anyone else sees.
+ */
+const PERSONAL = new Set(['name']);
+
 export class UnknownConfigKeyError extends Error {
-  constructor(key) { super(`unknown config key "${key}". Writable: ${[...WRITABLE].join(', ')}.`); this.code = 'UNKNOWN_CONFIG_KEY'; }
+  constructor(key) { super(`unknown config key "${key}". Writable: ${[...WRITABLE, ...PERSONAL].join(', ')}.`); this.code = 'UNKNOWN_CONFIG_KEY'; }
 }
 export class InvalidConfigValueError extends Error {
   constructor(msg) { super(msg); this.code = 'INVALID_CONFIG_VALUE'; }
 }
 
-export function getConfig({ teamctxDir } = {}) {
+export async function getConfig({ teamctxDir, projectDir } = {}) {
   const c = readConfig(teamctxDir);
+  const actor = await resolveActor({ config: c, cwd: projectDir });
   return {
-    project: c.project, me: c.me, provider: c.provider || 'anthropic', model: c.model,
+    me: await resolveDisplayName({ actor, config: c, teamctxDir }),
+    activeWorkstream: await resolveActiveWorkstream({ actor, config: c, teamctxDir }),
+    projectDefaults: { me: c.me, activeWorkstream: c.activeWorkstream || 'main' },
+    project: c.project, provider: c.provider || 'anthropic', model: c.model,
     manager: c.manager || null, managerEmail: c.managerEmail || '',
     deployUrl: c.deployUrl || '', githubRawBase: c.githubRawBase || '',
-    autoPush: !!c.autoPush, activeWorkstream: c.activeWorkstream || 'main',
+    autoPush: !!c.autoPush,
     workstreams: c.workstreams || [], roles: c.roles || [],
   };
 }
 
-export function setConfig({ key, value, teamctxDir } = {}) {
+export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
+  if (PERSONAL.has(key)) {
+    const config = readConfig(teamctxDir);
+    const v = String(value).trim();
+    if (!v) throw new InvalidConfigValueError('name cannot be empty.');
+    const actor = await resolveActor({ config, cwd: projectDir });
+    await writePrefs(actor, { name: v }, teamctxDir);
+    return { key, value: v, notes: ['personal setting — stored against you, not written to the repo.'] };
+  }
   if (!WRITABLE.has(key)) throw new UnknownConfigKeyError(key);
   const config = readConfig(teamctxDir);
   const next = { ...config };
@@ -63,7 +84,12 @@ export function setConfig({ key, value, teamctxDir } = {}) {
   } else if (key === 'manager') {
     const v = value === '' || value === '""' || value === "''" ? '' : String(value);
     next.manager = v;
-    if (v && config.me !== v) notes.push(`your current identity (${config.me}) will no longer be able to approve/reject.`);
+    if (v) {
+      // Compare against who is actually running this, not the shared config.me.
+      const actor = await resolveActor({ config, cwd: projectDir });
+      const you = await resolveDisplayName({ actor, config, teamctxDir });
+      if (you !== v) notes.push(`your current identity (${you}) will no longer be able to approve/reject.`);
+    }
   } else if (key === 'autoPush') {
     next.autoPush = value === true || value === 'true' || value === 'y' || value === 'yes' || value === 1;
   } else {
