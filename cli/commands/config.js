@@ -1,7 +1,7 @@
 import { readConfig, writeConfig } from '../../src/storage.js';
 import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
 import { resolveActor } from '../../src/actor.js';
-import { writePrefs, resolveDisplayName } from '../../src/prefs.js';
+import { writePrefs, resolveDisplayName, resolveIdentity } from '../../src/prefs.js';
 
 const ALIASES = {
   opus: 'claude-opus-4-7',
@@ -145,12 +145,22 @@ export async function configDeployUrlCommand(value) {
 export async function configNameCommand(value) {
   const config = readConfig();
   const actor = await resolveActor({ config });
-  if (!value) {
-    const current = await resolveDisplayName({ actor, config });
-    console.log(`\nYour name on contributions: ${current} (from: ${actor.source})`);
+  if (value === undefined) {
+    const current = await resolveIdentity({ actor, config });
+    console.log(`\nYour name on contributions: ${current.name} (from: ${current.source})`);
     console.log('\nUsage: teamctx config name <your name>');
+    console.log('       teamctx config name ""   — clear the override and derive it again');
     return;
   }
-  await writePrefs(actor, { name: value }, undefined);
-  console.log(`✓ Your name is now "${value}". (Personal setting — not committed.)`);
+  // Empty clears the override rather than storing a blank, so the name goes
+  // back to being derived — and keeps following the identity if it changes.
+  const next = (value === '""' || value === "''" ? '' : String(value)).trim();
+  if (!next) {
+    await writePrefs(actor, { name: null }, undefined);
+    const restored = await resolveIdentity({ actor, config });
+    console.log(`✓ Override cleared — your name is derived again: ${restored.name} (from: ${restored.source})`);
+    return;
+  }
+  await writePrefs(actor, { name: next }, undefined);
+  console.log(`✓ Your name is now "${next}". (Personal setting — not committed.)`);
 }

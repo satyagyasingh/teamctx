@@ -121,7 +121,13 @@ export async function writePrefs(actor, patch, teamctxDir) {
   const actorKey = actor?.key;
   if (!actorKey) throw new Error('cannot save preferences without an actor');
 
-  const next = { ...(await readPrefs(actor, teamctxDir)), ...patch };
+  const merged = { ...(await readPrefs(actor, teamctxDir)), ...patch };
+  // A null/undefined value clears the preference rather than storing a blank,
+  // so the setting falls back to the derived value again instead of shadowing
+  // it forever with an identical-looking string.
+  const next = Object.fromEntries(
+    Object.entries(merged).filter(([, v]) => v !== null && v !== undefined),
+  );
 
   const session = getCurrentSession();
   if (session) {
@@ -143,8 +149,23 @@ export async function resolveActiveWorkstream({ actor, config, teamctxDir } = {}
   return prefs.activeWorkstream || config?.activeWorkstream || 'main';
 }
 
+/**
+ * Display name for this actor, with where it came from.
+ *
+ * The source describes the *name*, not the actor: someone authenticated via
+ * GitHub who has set their own handle is `override`, not `github`. Callers that
+ * surface provenance (get_status, teamctx status) would otherwise claim the
+ * name came from GitHub when it did not.
+ */
+export async function resolveIdentity({ actor, config, teamctxDir } = {}) {
+  const prefs = await readPrefs(actor, teamctxDir);
+  if (prefs.name) return { name: prefs.name, source: 'override' };
+  if (actor?.name) return { name: actor.name, source: actor.source };
+  if (config?.me) return { name: config.me, source: 'config' };
+  return { name: 'unknown', source: 'fallback' };
+}
+
 /** Display name for this actor: their own override wins over the derived one. */
 export async function resolveDisplayName({ actor, config, teamctxDir } = {}) {
-  const prefs = await readPrefs(actor, teamctxDir);
-  return prefs.name || actor?.name || config?.me || 'unknown';
+  return (await resolveIdentity({ actor, config, teamctxDir })).name;
 }

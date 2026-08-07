@@ -58,6 +58,10 @@ vi.mock('../src/prefs.js', () => ({
   writePrefs: vi.fn(async (actor, patch) => patch),
   resolveActiveWorkstream: vi.fn(async ({ config }) => config?.activeWorkstream || 'main'),
   resolveDisplayName: vi.fn(async ({ actor, config }) => actor?.name || config?.me || 'unknown'),
+  resolveIdentity: vi.fn(async ({ actor, config }) => ({
+    name: actor?.name || config?.me || 'unknown',
+    source: actor?.source || 'config',
+  })),
   ensureGitignored: vi.fn(),
 }));
 

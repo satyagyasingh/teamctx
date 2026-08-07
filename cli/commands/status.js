@@ -1,11 +1,11 @@
 import { readConfig, readWorkstream, listWorkstreamIds, readContributions, listTasks } from '../../src/storage.js';
 import { resolveActor } from '../../src/actor.js';
-import { resolveActiveWorkstream, resolveDisplayName } from '../../src/prefs.js';
+import { resolveActiveWorkstream, resolveIdentity } from '../../src/prefs.js';
 
 export async function statusCommand() {
   const config = readConfig();
   const actor = await resolveActor({ config });
-  const me = await resolveDisplayName({ actor, config });
+  const identity = await resolveIdentity({ actor, config });
   const activeWorkstream = await resolveActiveWorkstream({ actor, config });
   const contributions = readContributions();
   const decisions = contributions.filter(c => c.tagged === 'decision');
@@ -22,7 +22,7 @@ export async function statusCommand() {
   const compiledTasks = allTasks.filter(t => t.compiledAt).length;
 
   console.log(`\n${config.project} — teamctx status\n`);
-  console.log(`  You:          ${me} (${actor.source})`);
+  console.log(`  You:          ${identity.name} (${identity.source})`);
   console.log(`  Model:        ${config.model}`);
   console.log(`  Provider:     ${config.provider || 'anthropic'}`);
   console.log(`  Auto-push:    ${config.autoPush ? 'on' : 'off'}`);

@@ -15,8 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on the CLI and stdio MCP, falling back to `config.me` — and a preference
   store (`src/prefs.js`) keeps their choices out of the repo: KV when hosted,
   a gitignored `.teamctx/.local/prefs.json` locally.
-- `config_set name` sets the display name used on your own contributions.
-  Personal: it is stored against you and never written to the repo.
+- `config_set name` / `teamctx config name` sets the display name used on your
+  own contributions. Personal: it is stored against you and never written to
+  the repo. Passing an empty value clears the override so the name is derived
+  from your identity again — and keeps following it if that identity changes.
 - Contributions now carry an `authorKey` alongside `author`, so one person is
   counted once in the `## Contributors` roll-up even when their display name
   differs between the CLI (git name) and the hosted server (GitHub name).
@@ -29,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anyone who has not switched, so existing projects behave as before.
 - `get_status` and `get_config` return `me` and `activeWorkstream` resolved
   for the calling user, with the repo's values under `projectDefaults`.
+  `get_status.meSource` reports where the *name* came from (`override` when the
+  user set their own), and `actorSource` where the caller was authenticated.
 - `teamctx init` pre-fills the name prompt from the git identity and records
   the chosen handle as the initializer's own preference.
 

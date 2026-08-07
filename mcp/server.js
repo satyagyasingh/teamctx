@@ -32,7 +32,7 @@ import { contributeCore } from '../cli/commands/contribute.core.js';
 import { reflectWorkstream } from '../cli/commands/reflect.core.js';
 import { getConfig, setConfig } from '../cli/commands/config.core.js';
 import { resolveActor } from '../src/actor.js';
-import { resolveActiveWorkstream, resolveDisplayName } from '../src/prefs.js';
+import { resolveActiveWorkstream, resolveIdentity } from '../src/prefs.js';
 
 export function resolveProjectDir(argv = process.argv.slice(2), env = process.env, cwd = process.cwd()) {
   const flagIdx = argv.findIndex(a => a === '--project' || a === '-p');
@@ -367,9 +367,13 @@ export function makeHandlers(projectRoot) {
 
   const who = async (teamctxDir, config) => {
     const actor = await resolveActor({ config, cwd: gitCwd });
+    const identity = await resolveIdentity({ actor, config, teamctxDir });
     return {
       actor,
-      name: await resolveDisplayName({ actor, config, teamctxDir }),
+      name: identity.name,
+      // Where the *name* came from. 'override' when the user set their own,
+      // which is not the same as where the actor was authenticated.
+      nameSource: identity.source,
       workstream: await resolveActiveWorkstream({ actor, config, teamctxDir }),
     };
   };
@@ -436,7 +440,8 @@ export function makeHandlers(projectRoot) {
         // Who *this caller* is and where *they* are working — not the shared
         // config.me / config.activeWorkstream, which are only the defaults.
         me: me.name,
-        meSource: me.actor.source,
+        meSource: me.nameSource,
+        actorSource: me.actor.source,
         activeWorkstream: me.workstream,
         projectDefaults: { me: config.me, activeWorkstream: config.activeWorkstream || 'main' },
         totalWhys: workstreams.reduce((n, w) => n + w.whyCount, 0),

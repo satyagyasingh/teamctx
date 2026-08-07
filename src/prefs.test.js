@@ -16,7 +16,7 @@ vi.mock('./oauth/kv.js', () => ({
   keys: { prefs: (actorKey, owner, repo) => `teamctx:prefs:${actorKey}:${owner}/${repo}` },
 }));
 
-import { readPrefs, writePrefs, resolveActiveWorkstream, resolveDisplayName, ensureGitignored } from './prefs.js';
+import { readPrefs, writePrefs, resolveActiveWorkstream, resolveDisplayName, resolveIdentity, ensureGitignored } from './prefs.js';
 
 const ALICE = { key: 'git:alice@example.com', name: 'Alice' };
 const BOB = { key: 'github:99', name: 'Bob' };
@@ -171,5 +171,49 @@ describe('display name', () => {
   it('falls back to config.me, then to unknown', async () => {
     expect(await resolveDisplayName({ actor: null, config: { me: 'config-me' }, teamctxDir })).toBe('config-me');
     expect(await resolveDisplayName({ actor: null, config: {}, teamctxDir })).toBe('unknown');
+  });
+});
+
+
+describe('name provenance and clearing', () => {
+  const GH = { key: 'github:42', name: 'Satyagya Singh', source: 'github' };
+
+  it('reports where the name came from, not where the actor did', async () => {
+    // Authenticated via GitHub but using their own handle: the name is an
+    // override, and saying "github" would misreport its provenance.
+    expect(await resolveIdentity({ actor: GH, config: {}, teamctxDir }))
+      .toEqual({ name: 'Satyagya Singh', source: 'github' });
+
+    await writePrefs(GH, { name: 'satya' }, teamctxDir);
+    expect(await resolveIdentity({ actor: GH, config: {}, teamctxDir }))
+      .toEqual({ name: 'satya', source: 'override' });
+  });
+
+  it('falls back through config and then to unknown', async () => {
+    expect(await resolveIdentity({ actor: null, config: { me: 'alice' }, teamctxDir }))
+      .toEqual({ name: 'alice', source: 'config' });
+    expect(await resolveIdentity({ actor: null, config: {}, teamctxDir }))
+      .toEqual({ name: 'unknown', source: 'fallback' });
+  });
+
+  it('clears the override so the name is derived again', async () => {
+    await writePrefs(GH, { name: 'satya' }, teamctxDir);
+    await writePrefs(GH, { name: null }, teamctxDir);
+    // Not stored as an empty string — the key is gone, so the derived value
+    // wins again and keeps following the identity if it changes.
+    expect(await readPrefs(GH, teamctxDir)).toEqual({});
+    expect(await resolveIdentity({ actor: GH, config: {}, teamctxDir }))
+      .toEqual({ name: 'Satyagya Singh', source: 'github' });
+  });
+
+  it('clearing one preference leaves the others intact', async () => {
+    await writePrefs(GH, { name: 'satya', activeWorkstream: 'tech' }, teamctxDir);
+    await writePrefs(GH, { name: null }, teamctxDir);
+    expect(await readPrefs(GH, teamctxDir)).toEqual({ activeWorkstream: 'tech' });
+  });
+
+  it('resolveDisplayName still returns just the name', async () => {
+    await writePrefs(GH, { name: 'satya' }, teamctxDir);
+    expect(await resolveDisplayName({ actor: GH, config: {}, teamctxDir })).toBe('satya');
   });
 });

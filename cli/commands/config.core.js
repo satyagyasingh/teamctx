@@ -1,7 +1,7 @@
 import { readConfig, writeConfig } from '../../src/storage.js';
 import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
 import { resolveActor } from '../../src/actor.js';
-import { writePrefs, resolveDisplayName, resolveActiveWorkstream } from '../../src/prefs.js';
+import { writePrefs, resolveDisplayName, resolveIdentity, resolveActiveWorkstream } from '../../src/prefs.js';
 
 const ALIASES = {
   opus: 'claude-opus-4-7',
@@ -49,9 +49,16 @@ export async function getConfig({ teamctxDir, projectDir } = {}) {
 export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
   if (PERSONAL.has(key)) {
     const config = readConfig(teamctxDir);
-    const v = String(value).trim();
-    if (!v) throw new InvalidConfigValueError('name cannot be empty.');
     const actor = await resolveActor({ config, cwd: projectDir });
+    // Empty clears the override, so the name goes back to being derived from
+    // the caller's identity — and keeps following it if that identity changes.
+    const raw = value === null || value === undefined ? '' : String(value);
+    const v = (raw === '""' || raw === "''" ? '' : raw).trim();
+    if (!v) {
+      await writePrefs(actor, { name: null }, teamctxDir);
+      const restored = await resolveIdentity({ actor, config, teamctxDir });
+      return { key, value: restored.name, notes: [`override cleared — your name is derived again (from: ${restored.source}).`] };
+    }
     await writePrefs(actor, { name: v }, teamctxDir);
     return { key, value: v, notes: ['personal setting — stored against you, not written to the repo.'] };
   }
