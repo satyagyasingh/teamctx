@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { getCurrentSession } from './session-context.js';
+import { getTeamctxDir } from './storage.js';
 import { kvGet, kvSet, keys } from './oauth/kv.js';
 
 /**
@@ -29,8 +30,16 @@ const LOCAL_DIR = '.local';
 const PREFS_FILE = 'prefs.json';
 const IGNORE_ENTRY = '.teamctx/.local/';
 
+/**
+ * CLI callers usually omit `teamctxDir` and let the storage layer find it, so
+ * mirror that here rather than making every call site pass one.
+ */
+function localDir(teamctxDir) {
+  return typeof teamctxDir === 'string' && teamctxDir ? teamctxDir : getTeamctxDir();
+}
+
 function localPrefsPath(teamctxDir) {
-  return join(teamctxDir, LOCAL_DIR, PREFS_FILE);
+  return join(localDir(teamctxDir), LOCAL_DIR, PREFS_FILE);
 }
 
 function readLocalFile(teamctxDir) {
@@ -70,7 +79,7 @@ function writeLocal(actorKey, next, teamctxDir) {
  * settings would be committed and pushed to the whole team.
  */
 export function ensureGitignored(teamctxDir) {
-  const projectDir = dirname(teamctxDir);
+  const projectDir = dirname(localDir(teamctxDir));
   const gitignorePath = join(projectDir, '.gitignore');
   let current = '';
   try { current = readFileSync(gitignorePath, 'utf-8'); } catch { /* no .gitignore yet */ }

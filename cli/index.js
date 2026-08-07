@@ -14,7 +14,7 @@ import { pullCommand } from './commands/pull.js';
 import { reflectCommand } from './commands/reflect.js';
 import { contextCommand } from './commands/context.js';
 import { statusCommand } from './commands/status.js';
-import { configModelCommand, configGithubRawBaseCommand, configManagerCommand, configManagerEmailCommand, configDeployUrlCommand, configProviderCommand } from './commands/config.js';
+import { configModelCommand, configGithubRawBaseCommand, configManagerCommand, configManagerEmailCommand, configDeployUrlCommand, configProviderCommand, configNameCommand } from './commands/config.js';
 import { reviewListCommand, reviewApproveCommand, reviewRejectCommand } from './commands/review.js';
 import {
   snapshotCreateCommand, snapshotListCommand, snapshotShowCommand,
@@ -131,6 +131,7 @@ task.command('compile <id>').description('Generate an AI-ready prompt file for t
   .action(taskCompileCommand);
 
 const config = program.command('config').description('View or change project settings');
+config.command('name [value]').description('Get or set your own display name on contributions (personal; not committed)').action(configNameCommand);
 config.command('provider [value]').description('Get or set the AI provider (anthropic|openai|gemini)').action(configProviderCommand);
 config.command('model [value]').description('Get or set the AI model').action(configModelCommand);
 config.command('github-raw-base [value]').description('Get or set the GitHub raw base URL').action(configGithubRawBaseCommand);

@@ -1,5 +1,7 @@
 import { readConfig, writeConfig } from '../../src/storage.js';
 import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
+import { resolveActor } from '../../src/actor.js';
+import { writePrefs, resolveDisplayName } from '../../src/prefs.js';
 
 const ALIASES = {
   opus: 'claude-opus-4-7',
@@ -92,9 +94,9 @@ export async function configManagerCommand(value) {
   const config = readConfig();
   if (!value) {
     console.log(`\nCurrent manager: ${config.manager || '(not set — solo mode: anyone can approve/reject)'}`);
-    console.log(`Your identity (config.me): ${config.me}`);
+    console.log(`Your identity: ${(await resolveDisplayName({ actor: await resolveActor({ config }), config }))}`);
     console.log('\nUsage: teamctx config manager <name>');
-    console.log('Set to your `config.me` value to enable the approval gate.');
+    console.log('Set to your identity above to enable the approval gate.');
     console.log('Set to "" (empty) to disable the gate (solo mode).');
     return;
   }
@@ -104,8 +106,9 @@ export async function configManagerCommand(value) {
     console.log('✓ Manager gate cleared (solo mode: anyone can approve/reject).');
   } else {
     console.log(`✓ Manager set to ${next}. Only this identity may approve/reject pending contributions.`);
-    if (config.me !== next) {
-      console.log(`Note: your current identity (${config.me}) will no longer be able to approve/reject.`);
+    const you = await resolveDisplayName({ actor: await resolveActor({ config }), config });
+    if (you !== next) {
+      console.log(`Note: your current identity (${you}) will no longer be able to approve/reject.`);
     }
   }
 }
@@ -131,4 +134,23 @@ export async function configDeployUrlCommand(value) {
   }
   writeConfig({ ...config, deployUrl: value });
   console.log(`✓ deployUrl set to ${value}`);
+}
+
+
+/**
+ * Your display name on contributions. Personal, not project-wide: it is stored
+ * against you under .teamctx/.local/ and never committed, so setting it does
+ * not rename anyone else.
+ */
+export async function configNameCommand(value) {
+  const config = readConfig();
+  const actor = await resolveActor({ config });
+  if (!value) {
+    const current = await resolveDisplayName({ actor, config });
+    console.log(`\nYour name on contributions: ${current} (from: ${actor.source})`);
+    console.log('\nUsage: teamctx config name <your name>');
+    return;
+  }
+  await writePrefs(actor, { name: value }, undefined);
+  console.log(`✓ Your name is now "${value}". (Personal setting — not committed.)`);
 }
