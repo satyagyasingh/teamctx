@@ -138,7 +138,10 @@ config.command('name [value]').description('Get or set your own display name on 
 config.command('provider [value]').description('Get or set the AI provider (anthropic|openai|gemini)').action(configProviderCommand);
 config.command('model [value]').description('Get or set the AI model').action(configModelCommand);
 config.command('github-raw-base [value]').description('Get or set the GitHub raw base URL').action(configGithubRawBaseCommand);
-config.command('manager [value]').description('Get or set the manager identity (name); only that identity may approve/reject').action(configManagerCommand);
+config.command('manager [value]').description('Get or set who may approve/reject — pin it to an identity, not a display name')
+  .option('--me', 'Pin the gate to your own identity')
+  .option('--clear', 'Remove the gate (anyone may approve/reject)')
+  .action(configManagerCommand);
 config.command('manager-email [value]').description('Get or set the manager email for contribution notifications').action(configManagerEmailCommand);
 config.command('deploy-url [value]').description('Get or set the Vercel deploy URL').action(configDeployUrlCommand);
 

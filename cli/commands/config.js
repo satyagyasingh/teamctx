@@ -1,6 +1,7 @@
 import { readConfig, writeConfig } from '../../src/storage.js';
 import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
 import { resolveActor } from '../../src/actor.js';
+import { setConfig } from './config.core.js';
 import { writePrefs, resolveDisplayName, resolveIdentity } from '../../src/prefs.js';
 
 const ALIASES = {
@@ -90,27 +91,36 @@ export async function configGithubRawBaseCommand(value) {
   console.log(`✓ githubRawBase set to ${value}`);
 }
 
-export async function configManagerCommand(value) {
+/**
+ * Who may approve or reject.
+ *
+ * Pinned to a stable identity, not a display name: display names are settable
+ * by their owner (`teamctx config name`), so gating on one lets anyone claim
+ * the manager's name and pass.
+ */
+export async function configManagerCommand(value, opts = {}) {
   const config = readConfig();
-  if (!value) {
-    console.log(`\nCurrent manager: ${config.manager || '(not set — solo mode: anyone can approve/reject)'}`);
-    console.log(`Your identity: ${(await resolveDisplayName({ actor: await resolveActor({ config }), config }))}`);
-    console.log('\nUsage: teamctx config manager <name>');
-    console.log('Set to your identity above to enable the approval gate.');
-    console.log('Set to "" (empty) to disable the gate (solo mode).');
+  const actor = await resolveActor({ config });
+
+  if (value === undefined && !opts.me && !opts.clear) {
+    const gate = config.managerKey
+      ? `${config.managerKey} (identity — secure)`
+      : (config.manager ? `${config.manager} (display name — advisory only)` : '(not set — anyone can approve/reject)');
+    console.log(`\nCurrent manager gate: ${gate}`);
+    console.log(`Your identity: ${actor.key}`);
+    console.log('\nUsage: teamctx config manager --me        # pin the gate to you');
+    console.log('       teamctx config manager @githublogin');
+    console.log('       teamctx config manager --clear');
+    if (config.manager && !config.managerKey) {
+      console.log('\nWarning: a display name is not a secure gate — anyone can set that');
+      console.log('name as their own with `teamctx config name`. Re-pin it with --me.');
+    }
     return;
   }
-  const next = value === '""' || value === "''" ? '' : value;
-  writeConfig({ ...config, manager: next });
-  if (!next) {
-    console.log('✓ Manager gate cleared (solo mode: anyone can approve/reject).');
-  } else {
-    console.log(`✓ Manager set to ${next}. Only this identity may approve/reject pending contributions.`);
-    const you = await resolveDisplayName({ actor: await resolveActor({ config }), config });
-    if (you !== next) {
-      console.log(`Note: your current identity (${you}) will no longer be able to approve/reject.`);
-    }
-  }
+
+  const requested = opts.clear ? '' : (opts.me ? '--me' : value);
+  const r = await setConfig({ key: 'manager', value: requested });
+  console.log(`✓ ${r.notes.join(' ')}`);
 }
 
 export async function configManagerEmailCommand(value) {

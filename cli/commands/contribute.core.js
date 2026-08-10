@@ -48,7 +48,9 @@ export async function contributeCore({
   const resolved = await resolveActor({ config, cwd: projectDir });
   const actor = author || await resolveDisplayName({ actor: resolved, config, teamctxDir });
   const authorKey = author ? null : resolved.key;
-  if (apply) assertManager(config, { actor });
+  // apply=true writes straight to shared context, so it is gated. Gate on the
+  // resolved identity, not on the `author` the caller handed us.
+  if (apply) assertManager(config, { actor: resolved, displayName: actor });
   const targetId = workstreamId
     || await resolveActiveWorkstream({ actor: resolved, config, teamctxDir });
   const known = new Set([

@@ -4,16 +4,16 @@ import {
   readCurrentSnapshotPointer, writeCurrentSnapshotPointer,
 } from '../../src/storage.js';
 import { buildSnapshot, buildApproved, buildRejected, buildPointer, snapshotWorkstreams } from '../../src/snapshots.js';
-import { canApprove } from '../../src/review.js';
+import { assertManager } from './review.core.js';
 import { commitContext, pushContext } from '../../src/git.js';
-import { ManagerGateError } from './review.core.js';
 import { resolveActor } from '../../src/actor.js';
 import { resolveDisplayName } from '../../src/prefs.js';
 
 /** Who is running this command — see src/actor.js. Falls back to config.me. */
-async function currentActorName(config, teamctxDir, projectDir) {
+async function currentIdentity(config, teamctxDir, projectDir) {
   const actor = await resolveActor({ config, cwd: projectDir });
-  return resolveDisplayName({ actor, config, teamctxDir });
+  const displayName = await resolveDisplayName({ actor, config, teamctxDir });
+  return { actor, displayName };
 }
 
 export class SnapshotNotFoundError extends Error {
@@ -27,10 +27,7 @@ export class SnapshotStateError extends Error {
   constructor(msg) { super(msg); this.code = 'SNAPSHOT_STATE'; }
 }
 
-function assertManager(config, actor) {
-  const effective = actor ? { ...config, me: actor } : config;
-  if (!canApprove(effective)) throw new ManagerGateError(effective);
-}
+
 
 function collectWorkstreams(teamctxDir) {
   const config = readConfig(teamctxDir);
@@ -51,7 +48,7 @@ async function commitAndPush(config, msg, { projectDir } = {}) {
 
 export async function createSnapshot({ message, teamctxDir, projectDir, actor } = {}) {
   const config = readConfig(teamctxDir);
-  const author = actor || await currentActorName(config, teamctxDir, projectDir);
+  const author = actor || (await currentIdentity(config, teamctxDir, projectDir)).displayName;
   const workstreams = collectWorkstreams(teamctxDir);
   const snapshot = buildSnapshot({ workstreams, author, message });
   writeSnapshot(snapshot, teamctxDir);
@@ -64,8 +61,10 @@ export async function createSnapshot({ message, teamctxDir, projectDir, actor } 
 
 export async function approveSnapshot({ prefix, teamctxDir, projectDir, actor } = {}) {
   const config = readConfig(teamctxDir);
-  const approvedBy = actor || await currentActorName(config, teamctxDir, projectDir);
-  assertManager(config, approvedBy);
+  // Gate on the resolved identity; `actor` is a claim used only for attribution.
+  const { actor: caller, displayName } = await currentIdentity(config, teamctxDir, projectDir);
+  assertManager(config, { actor: caller, displayName });
+  const approvedBy = actor || displayName;
   let id;
   try { id = resolveSnapshotId(prefix, teamctxDir); }
   catch (err) { throw new SnapshotNotFoundError(prefix, err); }
@@ -83,8 +82,9 @@ export async function approveSnapshot({ prefix, teamctxDir, projectDir, actor } 
 
 export async function rejectSnapshot({ prefix, reason, teamctxDir, projectDir, actor } = {}) {
   const config = readConfig(teamctxDir);
-  const rejectedBy = actor || await currentActorName(config, teamctxDir, projectDir);
-  assertManager(config, rejectedBy);
+  const { actor: caller, displayName } = await currentIdentity(config, teamctxDir, projectDir);
+  assertManager(config, { actor: caller, displayName });
+  const rejectedBy = actor || displayName;
   let id;
   try { id = resolveSnapshotId(prefix, teamctxDir); }
   catch (err) { throw new SnapshotNotFoundError(prefix, err); }

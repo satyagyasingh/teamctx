@@ -247,12 +247,11 @@ export const TOOLS = [
   },
   {
     name: 'review_approve',
-    description: RISKY + 'applies a queued contribution to shared context, regenerates the bound role files, and commits. Irreversible without a git revert. Manager-gated: caller (via `author`) must match config.manager if set. Report the queue item author + summary to the user before calling; report the resulting operations after.' + REPORT,
+    description: RISKY + 'applies a queued contribution to shared context, regenerates the bound role files, and commits. Irreversible without a git revert. Manager-gated against the authenticated caller; there is no way to assert a different identity. Report the queue item author + summary to the user before calling; report the resulting operations after.' + REPORT,
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', description: 'Queue item id (from list_pending_reviews)' },
-        author: { type: 'string', description: 'Caller identity — must match config.manager if a manager gate is set' },
       },
       required: ['id'], additionalProperties: false,
     },
@@ -265,7 +264,6 @@ export const TOOLS = [
       properties: {
         id: { type: 'string' },
         reason: { type: 'string' },
-        author: { type: 'string' },
       },
       required: ['id'], additionalProperties: false,
     },
@@ -286,7 +284,6 @@ export const TOOLS = [
       type: 'object',
       properties: {
         id: { type: 'string', description: 'Snapshot id or unique prefix' },
-        author: { type: 'string' },
       },
       required: ['id'], additionalProperties: false,
     },
@@ -297,7 +294,7 @@ export const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string' }, reason: { type: 'string' }, author: { type: 'string' },
+        id: { type: 'string' }, reason: { type: 'string' },
       },
       required: ['id'], additionalProperties: false,
     },
@@ -319,7 +316,7 @@ export const TOOLS = [
       properties: {
         key: {
           type: 'string',
-          enum: ['provider', 'model', 'githubRawBase', 'manager', 'managerEmail', 'deployUrl', 'autoPush', 'name'],
+          enum: ['provider', 'model', 'githubRawBase', 'manager', 'managerKey', 'managerEmail', 'deployUrl', 'autoPush', 'name'],
         },
         value: { description: 'String, boolean, or empty string to clear' },
       },
@@ -583,14 +580,15 @@ export function makeHandlers(projectRoot) {
       });
     },
 
-    async review_approve({ id, author }) {
-      const r = await approveReview({ id, teamctxDir: dir(), projectDir: projectRoot, actor: author });
+    async review_approve({ id }) {
+      // No caller-supplied identity: the gate reads the authenticated actor.
+      const r = await approveReview({ id, teamctxDir: dir(), projectDir: projectRoot });
       const reportBack = `Tell the user: approved contribution ${r.id} by ${r.author} on workstream "${r.workstream}" (${r.operations.length} op${r.operations.length === 1 ? '' : 's'}${r.rolesRegenerated.length ? `, regenerated roles: ${r.rolesRegenerated.join(', ')}` : ''}${r.pushed ? ', pushed' : ''}).`;
       return textResult({ ...r, reportBack });
     },
 
-    async review_reject({ id, reason, author }) {
-      const r = await rejectReview({ id, reason, teamctxDir: dir(), projectDir: projectRoot, actor: author });
+    async review_reject({ id, reason }) {
+      const r = await rejectReview({ id, reason, teamctxDir: dir(), projectDir: projectRoot });
       const reportBack = `Tell the user: rejected ${r.id}${r.reason ? ` (reason: ${r.reason})` : ''}${r.pushed ? ' — pushed' : ''}.`;
       return textResult({ ...r, reportBack });
     },
@@ -601,14 +599,14 @@ export function makeHandlers(projectRoot) {
       return textResult({ ...r, reportBack });
     },
 
-    async snapshot_approve({ id, author }) {
-      const r = await approveSnapshot({ prefix: id, teamctxDir: dir(), projectDir: projectRoot, actor: author });
+    async snapshot_approve({ id }) {
+      const r = await approveSnapshot({ prefix: id, teamctxDir: dir(), projectDir: projectRoot });
       const reportBack = `Tell the user: snapshot ${r.id} approved by ${r.approvedBy} — it is now the current-approved snapshot.`;
       return textResult({ ...r, reportBack });
     },
 
-    async snapshot_reject({ id, reason, author }) {
-      const r = await rejectSnapshot({ prefix: id, reason, teamctxDir: dir(), projectDir: projectRoot, actor: author });
+    async snapshot_reject({ id, reason }) {
+      const r = await rejectSnapshot({ prefix: id, reason, teamctxDir: dir(), projectDir: projectRoot });
       const reportBack = `Tell the user: snapshot ${r.id} rejected${r.reason ? ` (reason: ${r.reason})` : ''}.`;
       return textResult({ ...r, reportBack });
     },

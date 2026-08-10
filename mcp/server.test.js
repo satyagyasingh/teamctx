@@ -478,26 +478,38 @@ describe('contribute (new tool)', () => {
 });
 
 describe('review_approve (manager-gated)', () => {
-  const configWithManager = { ...baseConfig, manager: 'boss', me: 'alice', activeWorkstream: 'main', workstreams: [{ id: 'main' }], roles: [] };
+  // The mocked actor is alice, key git:alice@example.com — see the actor mock.
+  const gatedToSomeoneElse = { ...baseConfig, managerKey: 'github:9999', me: 'alice', activeWorkstream: 'main', workstreams: [{ id: 'main' }], roles: [] };
+  const gatedToCaller = { ...baseConfig, managerKey: 'git:alice@example.com', me: 'alice', activeWorkstream: 'main', workstreams: [{ id: 'main' }], roles: [] };
 
-  it('refuses when caller is not the manager', async () => {
-    readConfig.mockReturnValue(configWithManager);
+  it('refuses when the caller is not the pinned manager', async () => {
+    readConfig.mockReturnValue(gatedToSomeoneElse);
     const handlers = makeHandlers(ROOT);
-    await expect(handlers.review_approve({ id: 'q-1', author: 'alice' }))
+    await expect(handlers.review_approve({ id: 'q-1' }))
       .rejects.toThrow(/only the configured manager/);
     expect(readQueueItem).not.toHaveBeenCalled();
   });
 
-  it('proceeds when caller matches the manager', async () => {
-    readConfig.mockReturnValue(configWithManager);
+  it('cannot be bypassed by claiming to be the manager', async () => {
+    // The whole point: `author` is no longer accepted, and even if a client
+    // sends it the gate reads the authenticated actor instead.
+    readConfig.mockReturnValue(gatedToSomeoneElse);
+    const handlers = makeHandlers(ROOT);
+    await expect(handlers.review_approve({ id: 'q-1', author: 'the-manager' }))
+      .rejects.toThrow(/only the configured manager/);
+    expect(readQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('proceeds when the caller is the pinned manager', async () => {
+    readConfig.mockReturnValue(gatedToCaller);
     readQueueItem.mockReturnValue({ id: 'q-1', workstream: 'main', author: 'alice', operations: [{ type: 'addWhy', text: 't', summary: 's' }] });
     readWorkstream.mockReturnValue(baseWs);
     const handlers = makeHandlers(ROOT);
-    const result = await handlers.review_approve({ id: 'q-1', author: 'boss' });
+    const result = await handlers.review_approve({ id: 'q-1' });
     expect(writeWorkstream).toHaveBeenCalled();
     expect(deleteQueueItem).toHaveBeenCalled();
     const payload = JSON.parse(result.content[0].text);
-    expect(payload.approvedBy).toBe('boss');
+    expect(payload.approvedBy).toBe('alice');
     expect(payload.reportBack).toMatch(/approved contribution q-1/);
   });
 
@@ -513,7 +525,8 @@ describe('review_approve (manager-gated)', () => {
 
 describe('snapshot_create + snapshot_approve', () => {
   it('creates and approves through manager gate', async () => {
-    readConfig.mockReturnValue({ ...baseConfig, manager: 'boss', workstreams: [{ id: 'main' }], roles: [] });
+    // Pinned to someone other than the mocked caller (alice).
+    readConfig.mockReturnValue({ ...baseConfig, managerKey: 'github:9999', workstreams: [{ id: 'main' }], roles: [] });
     readWorkstream.mockReturnValue(baseWs);
     listWorkstreamIds.mockReturnValue([]);
 
@@ -525,9 +538,14 @@ describe('snapshot_create + snapshot_approve', () => {
     expect(createdPayload.reportBack).toMatch(/manager must approve/);
 
     readSnapshot.mockReturnValue({ id: 'snap-1', status: 'pending', workstreams: [{ id: 'main', tree: baseWs }] });
-    await expect(handlers.snapshot_approve({ id: 'snap-1', author: 'alice' }))
+    await expect(handlers.snapshot_approve({ id: 'snap-1' }))
       .rejects.toThrow(/only the configured manager/);
-    await handlers.snapshot_approve({ id: 'snap-1', author: 'boss' });
+    // Claiming the manager's name does not help either.
+    await expect(handlers.snapshot_approve({ id: 'snap-1', author: 'the-manager' }))
+      .rejects.toThrow(/only the configured manager/);
+
+    readConfig.mockReturnValue({ ...baseConfig, managerKey: 'git:alice@example.com', workstreams: [{ id: 'main' }], roles: [] });
+    await handlers.snapshot_approve({ id: 'snap-1' });
     expect(writeSnapshot).toHaveBeenCalledTimes(2);
   });
 });

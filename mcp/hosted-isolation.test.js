@@ -26,6 +26,8 @@ const BOB = { key: 'github:2002', name: 'Bob Example', login: 'bob', source: 'gi
 const CONFIG = {
   project: 'Ledger',
   me: 'whoever-ran-init',
+  // Gate pinned to Alice's GitHub identity.
+  managerKey: 'github:1001',
   model: 'claude-sonnet-4-6',
   autoPush: false,
   roles: [],
@@ -148,5 +150,44 @@ describe('two identities on the hosted server', () => {
     expect([b.me, b.activeWorkstream]).toEqual(['Bob Example', 'main']);
     expect([a2.me, a2.activeWorkstream]).toEqual(['Alice Example', 'engineering-hiring']);
     expect([b2.me, b2.activeWorkstream]).toEqual(['Bob Example', 'main']);
+  });
+});
+
+
+describe('the manager gate cannot be talked around', () => {
+  it('lets the pinned manager approve', async () => {
+    const session = fakeSession();
+    session.write('.teamctx/queue/q-1.json', JSON.stringify({
+      id: 'q-1', status: 'pending', workstream: 'main', author: 'bob',
+      operations: [{ type: 'addWhy', text: 't', summary: 's' }],
+    }));
+    const r = await asUser(session, ALICE, h => json(h.review_approve({ id: 'q-1' })));
+    expect(r.approvedBy).toBe('Alice Example');
+  });
+
+  it('refuses someone who is not the manager', async () => {
+    const session = fakeSession();
+    await expect(asUser(session, BOB, h => h.review_approve({ id: 'q-1' })))
+      .rejects.toThrow(/only the configured manager/);
+  });
+
+  it("refuses even when the caller claims the manager's name", async () => {
+    // The old hole: `author` was taken at face value and used for the gate.
+    const session = fakeSession();
+    await expect(asUser(session, BOB, h => h.review_approve({ id: 'q-1', author: 'Alice Example' })))
+      .rejects.toThrow(/only the configured manager/);
+  });
+
+  it('refuses even after the caller renames themselves to the manager', async () => {
+    // The hole this PR would otherwise have opened: config_set name is
+    // self-service, so a name-based gate would hand Bob the keys.
+    const session = fakeSession();
+    await asUser(session, BOB, h => h.config_set({ key: 'name', value: 'Alice Example' }));
+
+    const bob = await asUser(session, BOB, h => json(h.get_status()));
+    expect(bob.me).toBe('Alice Example');          // he really is called that now
+
+    await expect(asUser(session, BOB, h => h.review_approve({ id: 'q-1' })))
+      .rejects.toThrow(/only the configured manager/);   // and it buys him nothing
   });
 });

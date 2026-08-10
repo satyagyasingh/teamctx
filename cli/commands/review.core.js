@@ -2,7 +2,7 @@ import {
   readConfig, readWorkstream, writeWorkstream, writeWorkstreamMd, writeRoleFile,
   readQueueItem, deleteQueueItem, writeRejected, readContributions, listQueue,
 } from '../../src/storage.js';
-import { applyQueueItem, buildRejected, canApprove } from '../../src/review.js';
+import { applyQueueItem, buildRejected, canApprove, isLegacyManagerRef } from '../../src/review.js';
 import { serializeToMd, generateRoleFile } from '../../src/context.js';
 import { commitContext, pushContext } from '../../src/git.js';
 import { resolveActor } from '../../src/actor.js';
@@ -12,17 +12,27 @@ function workstreamDisplayName(id, workstream, config) {
   return config.workstreams?.find(w => w.id === id)?.name || workstream.name || config.project;
 }
 
-async function currentActorName(config, teamctxDir, projectDir) {
+/**
+ * Who is really calling, and what they are called.
+ *
+ * The gate uses `actor` — a stable identity that the caller cannot choose. The
+ * display name is only for messages and for the deprecated name-matching path.
+ */
+async function currentIdentity(config, teamctxDir, projectDir) {
   const actor = await resolveActor({ config, cwd: projectDir });
-  return resolveDisplayName({ actor, config, teamctxDir });
+  const displayName = await resolveDisplayName({ actor, config, teamctxDir });
+  return { actor, displayName };
 }
 
 export class ManagerGateError extends Error {
-  constructor(config) {
-    super(`only the configured manager (${config.manager}) may approve or reject. You are ${config.me}.`);
+  constructor(config, { actor, displayName } = {}) {
+    const manager = config.managerKey || config.manager;
+    const you = displayName || actor?.name || 'unidentified';
+    const key = actor?.key ? ` (${actor.key})` : '';
+    super(`only the configured manager (${manager}) may approve or reject. You are ${you}${key}.`);
     this.code = 'MANAGER_GATE';
-    this.manager = config.manager;
-    this.actor = config.me;
+    this.manager = manager;
+    this.actor = you;
   }
 }
 
@@ -34,9 +44,14 @@ export class QueueItemNotFoundError extends Error {
   }
 }
 
-export function assertManager(config, { actor } = {}) {
-  const effective = actor ? { ...config, me: actor } : config;
-  if (!canApprove(effective)) throw new ManagerGateError(effective);
+export function assertManager(config, { actor, displayName } = {}) {
+  if (!canApprove(config, { actor, displayName })) {
+    throw new ManagerGateError(config, { actor, displayName });
+  }
+  if (isLegacyManagerRef(config)) {
+    // Names are settable by their owner, so a name-based gate is advisory only.
+    console.warn(`Warning: config.manager is a display name ("${config.manager}"), which anyone can set as their own. Run \`teamctx config manager --me\` as the manager to pin it to an identity.`);
+  }
 }
 
 export async function listPendingReviews({ teamctxDir } = {}) {
@@ -45,11 +60,11 @@ export async function listPendingReviews({ teamctxDir } = {}) {
 
 export async function approveReview({ id, teamctxDir, projectDir, actor } = {}) {
   const config = readConfig(teamctxDir);
-  // Without this the gate falls back to `config.me` — the same shared string on
-  // both sides of the comparison — so on a multi-user deployment it either lets
-  // everyone through or nobody, depending on who happened to run `init`.
-  const who = actor || await currentActorName(config, teamctxDir, projectDir);
-  assertManager(config, { actor: who });
+  // The gate reads the resolved identity, never the caller-supplied `actor`.
+  // That argument is attribution only: it is a claim, not a credential.
+  const { actor: caller, displayName } = await currentIdentity(config, teamctxDir, projectDir);
+  assertManager(config, { actor: caller, displayName });
+  const who = actor || displayName;
 
   let item;
   try { item = readQueueItem(id, teamctxDir); }
@@ -105,8 +120,9 @@ export async function approveReview({ id, teamctxDir, projectDir, actor } = {}) 
 
 export async function rejectReview({ id, reason, teamctxDir, projectDir, actor } = {}) {
   const config = readConfig(teamctxDir);
-  const rejectedBy = actor || await currentActorName(config, teamctxDir, projectDir);
-  assertManager(config, { actor: rejectedBy });
+  const { actor: caller, displayName } = await currentIdentity(config, teamctxDir, projectDir);
+  assertManager(config, { actor: caller, displayName });
+  const rejectedBy = actor || displayName;
 
   let item;
   try { item = readQueueItem(id, teamctxDir); }

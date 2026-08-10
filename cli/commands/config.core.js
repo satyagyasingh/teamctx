@@ -15,7 +15,7 @@ const PROVIDER_KEYS = {
   gemini: 'GEMINI_API_KEY',
 };
 
-const WRITABLE = new Set(['provider', 'model', 'githubRawBase', 'manager', 'managerEmail', 'deployUrl', 'autoPush']);
+const WRITABLE = new Set(['provider', 'model', 'githubRawBase', 'manager', 'managerKey', 'managerEmail', 'deployUrl', 'autoPush']);
 
 /**
  * Keys that describe the person rather than the project. They are stored
@@ -39,7 +39,7 @@ export async function getConfig({ teamctxDir, projectDir } = {}) {
     activeWorkstream: await resolveActiveWorkstream({ actor, config: c, teamctxDir }),
     projectDefaults: { me: c.me, activeWorkstream: c.activeWorkstream || 'main' },
     project: c.project, provider: c.provider || 'anthropic', model: c.model,
-    manager: c.manager || null, managerEmail: c.managerEmail || '',
+    manager: c.manager || null, managerKey: c.managerKey || null, managerEmail: c.managerEmail || '',
     deployUrl: c.deployUrl || '', githubRawBase: c.githubRawBase || '',
     autoPush: !!c.autoPush,
     workstreams: c.workstreams || [], roles: c.roles || [],
@@ -91,14 +91,32 @@ export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
       notes.push(`"${resolved}" is not in the known model list for ${providerId} (accepted anyway).`);
     }
     next.model = resolved;
-  } else if (key === 'manager') {
-    const v = value === '' || value === '""' || value === "''" ? '' : String(value);
-    next.manager = v;
-    if (v) {
-      // Compare against who is actually running this, not the shared config.me.
-      const actor = await resolveActor({ config, cwd: projectDir });
+  } else if (key === 'manager' || key === 'managerKey') {
+    const raw = value === '' || value === '""' || value === "''" ? '' : String(value).trim();
+    const actor = await resolveActor({ config, cwd: projectDir });
+
+    if (!raw) {
+      next.manager = '';
+      next.managerKey = '';
+      notes.push('manager gate cleared — anyone may approve or reject.');
+    } else if (raw === '--me' || raw === 'me' || key === 'managerKey') {
+      // Pin the gate to a stable identity. `--me` means whoever is running this.
+      const ref = (raw === '--me' || raw === 'me') ? actor.key : raw;
+      next.managerKey = ref;
+      next.manager = '';
+      notes.push(`gate pinned to ${ref}. Display names no longer grant approval.`);
+    } else if (raw.startsWith('@') || raw.includes(':')) {
+      next.managerKey = raw;
+      next.manager = '';
+      notes.push(`gate pinned to ${raw}.`);
+    } else {
+      // Legacy: a bare display name. Kept working so existing projects do not
+      // break, but anyone can set that name as their own, so it is advisory.
+      next.manager = raw;
+      next.managerKey = '';
       const you = await resolveDisplayName({ actor, config, teamctxDir });
-      if (you !== v) notes.push(`your current identity (${you}) will no longer be able to approve/reject.`);
+      notes.push('a display name is not a secure gate — anyone can set that name as their own. Prefer `managerKey` (or `manager --me`).');
+      if (you !== raw) notes.push(`your current identity (${you}) will no longer be able to approve/reject.`);
     }
   } else if (key === 'autoPush') {
     next.autoPush = value === true || value === 'true' || value === 'y' || value === 'yes' || value === 1;

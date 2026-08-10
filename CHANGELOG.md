@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on the CLI and stdio MCP, falling back to `config.me` — and a preference
   store (`src/prefs.js`) keeps their choices out of the repo: KV when hosted,
   a gitignored `.teamctx/.local/prefs.json` locally.
+- `teamctx config manager --me` pins the approval gate to your own identity
+  (`managerKey`), which no one else can claim. `@login` and a raw actor key
+  also work. A project still holding a display name in `config.manager` keeps
+  working, with a warning on every gated action — that form is advisory only,
+  since anyone can set that name as their own.
 - `config_set name` / `teamctx config name` sets the display name used on your
   own contributions. Personal: it is stored against you and never written to
   the repo. `teamctx config name --clear` drops the override so the name is
@@ -45,10 +50,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   project's shared config rather than the one it belongs to — an OpenAI key
   was handed to the Anthropic client. The stored provider now travels with
   the key, and the model follows it.
-- Approving or rejecting on the hosted server compared `config.me` against
-  `config.manager` — both read from the same shared file — so the gate let
-  everyone through or nobody, depending on who ran `init`. It now compares
-  against the caller.
+- **The approval gate is now bound to an identity, not a display name.**
+  `canApprove` compared `config.me` against `config.manager` — two strings from
+  the same shared file — so on a multi-user deployment it let everyone through
+  or nobody, depending on who ran `init`. It now compares the authenticated
+  caller's actor key against `config.managerKey`.
+- **`review_approve` / `review_reject` / `snapshot_approve` / `snapshot_reject`
+  no longer accept an `author` argument.** It was a caller-supplied claim used
+  as the identity for the gate check, so any hosted caller could pass
+  `author: "<manager's name>"` and through. The gate now reads the
+  authenticated actor and nothing else; `author` remains on `contribute` for
+  attribution only, where it grants no authority.
 
 ## [0.3.0] - 2026-08-07
 
