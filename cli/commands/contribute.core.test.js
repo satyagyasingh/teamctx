@@ -56,11 +56,11 @@ describe('contributeCore — manager gate on apply', () => {
     expect(commitContext).not.toHaveBeenCalled();
   });
 
-  it('allows apply=true when caller matches the configured manager', async () => {
-    readConfig.mockReturnValue({ project: 'p', me: 'priya', manager: 'priya', autoPush: false, roles: [] });
-    const result = await contributeCore({
-      text: 'note', author: 'priya', apply: true,
-    });
+  it('allows apply=true when the resolved caller is the manager', async () => {
+    // The gate reads who the caller actually resolves to (Satya, per the actor
+    // mock) — not the `author` they hand us, which is attribution only.
+    readConfig.mockReturnValue({ project: 'p', me: 'someone', manager: 'Satya', autoPush: false, roles: [] });
+    const result = await contributeCore({ text: 'note', apply: true });
     expect(result.mode).toBe('applied');
     expect(writeWorkstream).toHaveBeenCalled();
     expect(commitContext).toHaveBeenCalled();
@@ -115,5 +115,29 @@ describe('contributeCore — attribution', () => {
     readConfig.mockReturnValue({ project: 'p', me: 'alice', autoPush: false, roles: [] });
     const r = await contributeCore({ text: 'note' });
     expect(r.author).toBe('alice');
+  });
+});
+
+
+describe('contributeCore — the apply gate ignores the claimed author', () => {
+  it('refuses apply=true on a legacy name gate even when author matches the manager', async () => {
+    // The resolved caller is Satya (see the actor mock). Claiming to be the
+    // manager must not grant the right to write straight to shared context.
+    readConfig.mockReturnValue({ project: 'p', me: 'someone', manager: 'priya', autoPush: false, roles: [] });
+    await expect(contributeCore({ text: 'note', author: 'priya', apply: true }))
+      .rejects.toBeInstanceOf(ManagerGateError);
+    expect(writeWorkstream).not.toHaveBeenCalled();
+  });
+
+  it('refuses apply=true on an identity gate the caller is not in', async () => {
+    readConfig.mockReturnValue({ project: 'p', me: 'someone', managerKey: 'github:9999', autoPush: false, roles: [] });
+    await expect(contributeCore({ text: 'note', apply: true }))
+      .rejects.toBeInstanceOf(ManagerGateError);
+  });
+
+  it('allows apply=true when the resolved caller is a manager', async () => {
+    readConfig.mockReturnValue({ project: 'p', me: 'someone', managerKey: 'github:42', autoPush: false, roles: [] });
+    const r = await contributeCore({ text: 'note', apply: true });
+    expect(r.mode).toBe('applied');
   });
 });

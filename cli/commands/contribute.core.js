@@ -46,11 +46,14 @@ export async function contributeCore({
   // the contribution is attributed to whoever is actually calling, not to the
   // `config.me` baked into the repo when someone ran `init`.
   const resolved = await resolveActor({ config, cwd: projectDir });
-  const actor = author || await resolveDisplayName({ actor: resolved, config, teamctxDir });
+  const resolvedName = await resolveDisplayName({ actor: resolved, config, teamctxDir });
+  const actor = author || resolvedName;
   const authorKey = author ? null : resolved.key;
-  // apply=true writes straight to shared context, so it is gated. Gate on the
-  // resolved identity, not on the `author` the caller handed us.
-  if (apply) assertManager(config, { actor: resolved, displayName: actor });
+  // apply=true writes straight to shared context, so it is gated. Both arguments
+  // must come from the resolution, never from `author`: on a project still using
+  // the legacy name gate, passing the caller's claimed name here would let
+  // `contribute({ apply: true, author: "<manager>" })` walk straight through.
+  if (apply) assertManager(config, { actor: resolved, displayName: resolvedName });
   const targetId = workstreamId
     || await resolveActiveWorkstream({ actor: resolved, config, teamctxDir });
   const known = new Set([
