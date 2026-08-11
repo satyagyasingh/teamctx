@@ -48,6 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Within one run, each document is told what earlier ones already proposed, so
   three files describing the same decision produce one contribution rather than
   three near-duplicates for the manager to reject. Closes #20.
+- **Import connectors.** `teamctx import --from <connector> <selector…>` — a
+  connector turns a source into the documents import already knows how to
+  distill, and nothing else: no AI calls, no queue writes, no dedupe, all of
+  which are shared and already built. `auth → list → fetch`, with `list`
+  separate so `--dry-run` can report what would be pulled without downloading
+  it. Credentials come from the environment, never from the committed
+  `config.json`.
+  Local paths resolve to the built-in `folder` connector, so every import
+  exercises the contract rather than leaving it to drift until the first remote
+  source is written. Whatever a connector returns goes through the same
+  document rules a local file does.
+  Individual sources (Slack, Drive, Microsoft 365, Dropbox, Notion, Coda) land
+  one PR each on top of this. Design notes:
+  [docs/proposals/import-connectors.md](docs/proposals/import-connectors.md).
+  Closes #21.
 
 ### Changed
 - `workstream_use` / `teamctx workstream use` now records a personal
