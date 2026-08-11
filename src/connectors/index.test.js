@@ -61,13 +61,27 @@ describe('every connector satisfies the contract', () => {
         if (!r.ok) expect(r.help, `${name} must explain how to authenticate`).toBeTruthy();
       });
 
-      it('contains no AI logic', async () => {
-        // Distilling is shared and already built. A connector that reaches for
-        // the model is doing someone else's job.
-        const { readFileSync } = await import('fs');
-        const src = readFileSync(new URL(`./${name}.js`, import.meta.url), 'utf-8');
-        expect(src).not.toMatch(/from '\.\.\/ai\.js'|providers\//);
-      });
     });
   }
+});
+
+describe('no connector reaches for the AI layer', () => {
+  // Distilling is shared and already built; a connector that calls the model is
+  // doing someone else's job. Scanned by directory rather than by connector
+  // name, so a file whose name differs from its `name` export is still checked.
+  it('holds for every file in src/connectors', async () => {
+    const { readdirSync, readFileSync } = await import('fs');
+    const { fileURLToPath } = await import('url');
+    const { join, dirname } = await import('path');
+
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const files = readdirSync(dir).filter(f =>
+      f.endsWith('.js') && f !== 'index.js' && !f.endsWith('.test.js'));
+
+    expect(files.length, 'expected at least one connector').toBeGreaterThan(0);
+    for (const f of files) {
+      const src = readFileSync(join(dir, f), 'utf-8');
+      expect(src, `${f} imports the AI layer`).not.toMatch(/\/ai\.js|providers\//);
+    }
+  });
 });
