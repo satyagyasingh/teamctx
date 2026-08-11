@@ -45,6 +45,7 @@ export async function importDocuments({
         // the artifact rather than just saying "import".
         source: `import:${doc.id}`,
         apply: false,
+        intent: 'document',
         teamctxDir,
         projectDir,
       });

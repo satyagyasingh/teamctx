@@ -58,13 +58,18 @@ export function serializeToMd(workstream, projectName, lastUpdatedBy = '', contr
   return header + tree + (contributorsSection ? `\n${contributorsSection}` : '');
 }
 
-export async function updateShared(workstream, contribution, config) {
+/**
+ * `intent` is forwarded to the distiller — see proposeDiff. It defaults to the
+ * plain contribution behaviour, so existing callers are unaffected.
+ */
+export async function updateShared(workstream, contribution, config, { intent } = {}) {
   const { summary, operations } = await proposeDiff({
     workstream,
     contribution: contribution.text,
     source: contribution.author,
     model: config.model,
     config,
+    intent,
   });
   const updated = applyOps(workstream, operations, contribution.id);
   return { workstream: updated, summary, operations };

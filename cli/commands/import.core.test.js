@@ -61,6 +61,14 @@ describe('importDocuments', () => {
     );
   });
 
+  it('distills documents with document intent, not contribution intent', async () => {
+    // Prose written for another purpose is mostly not durable team context;
+    // without this the distiller turns headings and dates into Why nodes.
+    write('docs/a.md', 'alpha');
+    await importDocuments({ paths: ['docs'], cwd: root });
+    expect(contributeCore).toHaveBeenCalledWith(expect.objectContaining({ intent: 'document' }));
+  });
+
   it('targets the requested workstream', async () => {
     write('docs/a.md', 'alpha');
     await importDocuments({ paths: ['docs'], cwd: root, workstreamId: 'infra' });
