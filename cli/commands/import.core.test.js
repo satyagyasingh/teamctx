@@ -76,6 +76,54 @@ describe('importDocuments', () => {
   });
 });
 
+describe('importDocuments — deduplication across a run', () => {
+  const withWhy = (text) => ({
+    id: 'c-x', mode: 'queued', summary: 's', workstream: 'main',
+    operations: [{ type: 'addWhy', text }],
+  });
+
+  it('tells each document what earlier ones already proposed', async () => {
+    // Nothing is applied until approval, so every document sees the same
+    // unchanged record — two files about one decision would both propose it.
+    write('docs/a.md', 'alpha');
+    write('docs/b.md', 'bravo');
+    write('docs/c.md', 'charlie');
+    contributeCore
+      .mockResolvedValueOnce(withWhy('Move billing off Stripe'))
+      .mockResolvedValueOnce(withWhy('Staff the ledger team'))
+      .mockResolvedValueOnce(withWhy('Freeze deploys at cutover'));
+
+    await importDocuments({ paths: ['docs'], cwd: root });
+
+    const avoidLists = contributeCore.mock.calls.map(([args]) => args.avoid);
+    expect(avoidLists[0]).toEqual([]);
+    expect(avoidLists[1]).toEqual(['Move billing off Stripe']);
+    expect(avoidLists[2]).toEqual(['Move billing off Stripe', 'Staff the ledger team']);
+  });
+
+  it('only carries forward new Why nodes, not edits or deletes', async () => {
+    write('docs/a.md', 'alpha');
+    write('docs/b.md', 'bravo');
+    contributeCore.mockResolvedValueOnce({
+      id: 'c-1', mode: 'queued', summary: 's', workstream: 'main',
+      operations: [
+        { type: 'editStatement', id: 'w1', text: 'reworded existing' },
+        { type: 'addHow', parentWhatId: 'x1', text: 'a task' },
+      ],
+    });
+    await importDocuments({ paths: ['docs'], cwd: root });
+    expect(contributeCore.mock.calls[1][0].avoid).toEqual([]);
+  });
+
+  it('carries nothing forward from a document that proposed nothing', async () => {
+    write('docs/a.md', 'alpha');
+    write('docs/b.md', 'bravo');
+    contributeCore.mockResolvedValueOnce({ id: 'c-1', mode: 'no-op', summary: 's', operations: [] });
+    await importDocuments({ paths: ['docs'], cwd: root });
+    expect(contributeCore.mock.calls[1][0].avoid).toEqual([]);
+  });
+});
+
 describe('importDocuments — dry run', () => {
   it('reads and reports without enqueueing anything', async () => {
     write('docs/a.md', '# A\n\nalpha');

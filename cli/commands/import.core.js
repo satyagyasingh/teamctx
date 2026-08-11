@@ -35,6 +35,12 @@ export async function importDocuments({
 
   const results = [];
   const failures = [];
+  // Every document is distilled against the same unchanged record, because
+  // nothing is applied until a manager approves. Two documents covering the
+  // same decision would therefore both propose it. Carrying forward what has
+  // already been proposed lets the distiller skip the repeat at the source,
+  // rather than queueing duplicates for a human to notice and reject.
+  const proposed = [];
   for (const [index, doc] of documents.entries()) {
     onProgress?.({ index, total: documents.length, document: doc });
     try {
@@ -46,6 +52,9 @@ export async function importDocuments({
         source: `import:${doc.id}`,
         apply: false,
         intent: 'document',
+        // A snapshot, not the live array: passing the mutable one would mean
+        // each document sees whatever later documents go on to add.
+        avoid: [...proposed],
         teamctxDir,
         projectDir,
       });
@@ -58,6 +67,9 @@ export async function importDocuments({
         operations: r.operations || [],
         workstream: r.workstream,
       });
+      for (const op of r.operations || []) {
+        if (op.type === 'addWhy' && op.text) proposed.push(op.text);
+      }
     } catch (err) {
       // A bad workstream id is a mistake about the whole run, not about this
       // document — fail immediately rather than burning an AI call per file.

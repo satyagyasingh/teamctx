@@ -88,8 +88,12 @@ function stripWorkstreamForPrompt(workstream) {
  *                    purpose. Most of it is not durable team context, and the
  *                    distiller has to be told so or it dutifully turns headings
  *                    and meeting dates into Why nodes.
+ *
+ * `avoid` carries Why texts already proposed earlier in the same import run.
+ * Each document is distilled against the same unchanged record, so without it
+ * two documents covering the same decision both propose it.
  */
-export async function proposeDiff({ workstream, contribution, source, model, config, intent = 'contribution' }) {
+export async function proposeDiff({ workstream, contribution, source, model, config, intent = 'contribution', avoid = [] }) {
   const isDocument = intent === 'document';
 
   const system = isDocument
@@ -106,6 +110,11 @@ export async function proposeDiff({ workstream, contribution, source, model, con
     'Current record (id + text only):',
     JSON.stringify(stripWorkstreamForPrompt(workstream), null, 2),
     '',
+    ...(avoid.length ? [
+      'Already proposed earlier in this same import — do NOT restate these:',
+      ...avoid.map(t => `- ${t}`),
+      '',
+    ] : []),
     `${label} (source: ${source}):`,
     `"""${contribution}"""`,
     '',
@@ -132,8 +141,8 @@ export async function proposeDiff({ workstream, contribution, source, model, con
       'context — the whys, decisions and constraints that outlive this file.',
       'Ignore document structure (headings, tables of contents, section order)',
       'and one-off details (a single meeting date, names mentioned in passing).',
-      'If something is already in the record above, emit no operation for it',
-      'rather than a near-duplicate.',
+      'If something is already in the record above, or listed as already',
+      'proposed, emit no operation for it rather than a near-duplicate.',
       'If the document carries no durable team context, return an empty',
       'operations array — that is a valid and useful answer.',
     ] : []),

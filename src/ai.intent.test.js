@@ -54,3 +54,29 @@ describe('proposeDiff — document intent', () => {
     expect(call().prompt).toMatch(/empty\s+operations array/i);
   });
 });
+
+describe('proposeDiff — avoid list', () => {
+  it('is absent when nothing has been proposed yet', async () => {
+    await proposeDiff({ workstream, contribution: 'x', source: 's', config: {}, intent: 'document' });
+    expect(call().prompt).not.toMatch(/Already proposed/);
+  });
+
+  it('lists what earlier documents in the run already proposed', async () => {
+    await proposeDiff({
+      workstream, contribution: 'x', source: 's', config: {}, intent: 'document',
+      avoid: ['Move billing off Stripe', 'Staff the ledger team'],
+    });
+    const { prompt } = call();
+    expect(prompt).toMatch(/Already proposed earlier in this same import/);
+    expect(prompt).toContain('- Move billing off Stripe');
+    expect(prompt).toContain('- Staff the ledger team');
+  });
+
+  it('still shows the existing record, so both sources of duplication are covered', async () => {
+    await proposeDiff({
+      workstream, contribution: 'x', source: 's', config: {}, intent: 'document',
+      avoid: ['Move billing off Stripe'],
+    });
+    expect(call().prompt).toContain('Existing why');
+  });
+});
