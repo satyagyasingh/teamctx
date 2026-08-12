@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`init` over the hosted MCP server crashed instead of bootstrapping a
+  project.** `initProject` was the one write path with no hosted branch: it ran
+  `join(projectDir, '.teamctx')` first, and in hosted mode `projectDir` is the
+  `{__backend:'github'}` context object, so it threw `The "path" argument must
+  be of type string` before touching anything. It now branches on
+  `getCurrentSession()` the way every other write path already does, writing
+  through the GitHub adapter rather than `mkdirSync`/`writeFileSync`. You could
+  not start a new project through the hosted surface at all before this.
+  Fixes #32.
+- Ten mutating MCP handlers passed `projectDir: projectRoot` rather than the
+  hosted-safe `gitCwd`. Harmless in practice — everything they reach checks for
+  an ambient session before using `cwd` — but that guard was the only thing
+  keeping the context object away from git, which is the wrong place to rely on.
+
 ### Added
 - **Per-user settings.** Identity and the active workstream are now resolved
   per person instead of being read from the committed `.teamctx/config.json`.
