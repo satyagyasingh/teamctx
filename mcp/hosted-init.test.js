@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { makeHandlers } from './server.js';
+import { initProject } from '../cli/commands/init.core.js';
 import { runWithSession } from '../src/session-context.js';
 import { runWithActor } from '../src/actor.js';
 import { __resetMemory } from '../src/oauth/kv.js';
@@ -77,9 +78,20 @@ describe('init over the hosted MCP server', () => {
     expect(session.files.has('.teamctx/contributions.jsonl')).toBe(false);
   });
 
-  it('commits once, with a message naming the project', async () => {
+  it('commits once, with a message naming the project and the source', async () => {
+    // "(via mcp)" matches what contributeCore already appends. A repo bootstrapped
+    // from a chat client has no other trace of where the commit came from.
     const session = emptySession();
     await asUser(session, h => h.init({ project: 'Ledger', me: 'alice' }));
+    expect(session.commits).toEqual(['chore: initialize teamctx for "Ledger" (via mcp)']);
+  });
+
+  it('leaves the note off when the source is not mcp', async () => {
+    // Guards the default: flipping it would rewrite the message every local
+    // `teamctx init` writes, which nothing else asserts.
+    const session = emptySession();
+    await runWithSession(session, () => runWithActor(ALICE, () =>
+      initProject({ project: 'Ledger', me: 'alice' })));
     expect(session.commits).toEqual(['chore: initialize teamctx for "Ledger"']);
   });
 

@@ -51,6 +51,7 @@ export async function initProject({
   deployUrl = '',
   githubRawBase = '',
   managerEmail = '',
+  source = 'cli',
 }) {
   // Hosted mode has no checkout: `projectDir` is the GitHub context object, and
   // every write goes through the session-aware storage layer instead. Every
@@ -118,7 +119,11 @@ export async function initProject({
     await writePrefs(actor, { name: me }, teamctxDir);
   } catch { /* preferences are best-effort; never block init */ }
 
-  await commitContext(`chore: initialize teamctx for "${project}"`, gitCwd ? { cwd: gitCwd } : undefined);
+  // Same note `contributeCore` puts on its commits: reading the history of a
+  // repo initialized from a chat client, there is otherwise nothing to say where
+  // the commit came from — no local checkout, no shell, just an author.
+  const sourceNote = source === 'mcp' ? ' (via mcp)' : '';
+  await commitContext(`chore: initialize teamctx for "${project}"${sourceNote}`, gitCwd ? { cwd: gitCwd } : undefined);
 
   let pushed = false;
   if (autoPush) {

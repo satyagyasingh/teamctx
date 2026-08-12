@@ -522,6 +522,7 @@ export function makeHandlers(projectRoot) {
         deployUrl: args.deployUrl,
         githubRawBase: args.githubRawBase,
         managerEmail: args.managerEmail,
+        source: 'mcp',
       });
       const reportBack = `Tell the user: teamctx initialized at ${r.projectDir} for project "${r.config.project}"` +
         (r.envVarPresent ? '' : ` — WARNING: ${r.envVarNeeded} is not set in the environment; ask/contribute/reflect will fail until it is.`) +

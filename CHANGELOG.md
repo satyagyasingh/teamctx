@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hosted-safe `gitCwd`. Harmless in practice — everything they reach checks for
   an ambient session before using `cwd` — but that guard was the only thing
   keeping the context object away from git, which is the wrong place to rely on.
+- The init commit made over MCP now reads `chore: initialize teamctx for "…"
+  (via mcp)`, matching the `(via mcp)` note `contribute` already appends. A repo
+  bootstrapped from a chat client has no local checkout and no shell, so the
+  history was the only record of where the commit came from — and it did not say.
 
 ### Added
 - **Per-user settings.** Identity and the active workstream are now resolved
