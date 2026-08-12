@@ -11,6 +11,7 @@ export async function importCommand(paths, opts = {}) {
     result = await importDocuments({
       paths,
       from: opts.from,
+      since: opts.since,
       workstreamId: opts.workstream,
       dryRun: !!opts.dryRun,
       // Reported before any distilling starts — on a large import the AI calls

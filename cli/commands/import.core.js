@@ -10,13 +10,13 @@ import { UnknownWorkstreamError } from './role.core.js';
  * directly, so the contract is exercised by every import instead of only by
  * code that does not exist yet. An interface nothing runs is decoration.
  */
-async function collect({ from, selector, cwd, env = process.env }) {
+async function collect({ from, selector, cwd, since, env = process.env }) {
   const connector = getConnector(from);
 
   const credentials = await connector.auth(env);
   if (!credentials?.ok) throw new ConnectorAuthError(connector.name, credentials?.help);
 
-  const listed = await connector.list(credentials, selector, { cwd });
+  const listed = await connector.list(credentials, selector, { cwd, since });
   const items = listed?.items ?? listed ?? [];
   const skipped = [...(listed?.skipped ?? [])];
 
@@ -58,6 +58,10 @@ export async function importDocuments({
   from = 'folder',
   workstreamId,
   dryRun = false,
+  // How far back a connector should look. Meaningless for a folder; the
+  // difference between a usable import and a drowned review queue for a chat
+  // source, so it belongs on the shared surface rather than in one connector.
+  since,
   cwd = process.cwd(),
   env,
   teamctxDir,
@@ -65,7 +69,7 @@ export async function importDocuments({
   onScanned,
   onProgress,
 } = {}) {
-  const { documents, skipped } = await collect({ from, selector: paths ?? [], cwd, env });
+  const { documents, skipped } = await collect({ from, selector: paths ?? [], cwd, since, env });
   // Reading is done before any AI call, so callers can report what was found
   // and skipped up front rather than after several minutes of distilling.
   onScanned?.({ documents, skipped });

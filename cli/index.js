@@ -76,6 +76,7 @@ program.command('pull').description('Fetch and process pending web contributions
 program.command('import [selector...]').description('Import documents as contributions for manager review')
   .option('--from <connector>', 'Where to import from (default: folder — local .md/.txt paths)')
   .option('--workstream <id>', 'Target workstream (default: active)')
+  .option('--since <date>', 'Only import material newer than this (connectors that have a timeline)')
   .option('--dry-run', 'List what would be imported without distilling or queueing')
   .action(importCommand);
 program.command('reflect').description('AI rewrites shared context for clarity')
