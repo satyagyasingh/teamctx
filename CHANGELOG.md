@@ -59,12 +59,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exercises the contract rather than leaving it to drift until the first remote
   source is written. Whatever a connector returns goes through the same
   document rules a local file does.
+  `--since` bounds how far back a connector looks. Meaningless for a folder and
+  the difference between a usable import and a drowned review queue for a chat
+  or wiki source, so it sits on the shared surface rather than inside one
+  connector.
   Individual sources (Slack, Drive, Microsoft 365, Dropbox, Notion, Coda) land
   one PR each on top of this. Design notes:
   [docs/proposals/import-connectors.md](docs/proposals/import-connectors.md).
   Closes #21.
 
 ### Changed
+- **Contributions record where they came from in the git history.** The commit
+  body carries `Source: import:docs/plan.md` (or `web`, `mcp`, and
+  `import:<id>` for whatever a connector returns) on the queue commit and again
+  when a manager approves it. Previously only `mcp` was named, and only on the
+  applied path, so an imported contribution was indistinguishable from a typed
+  one in `git log .teamctx/` — which is the audit trail, and what `teamctx
+  stats` will walk. In the body rather than the subject: a remote id can run to
+  `import:slack:C0421/p1699887654123456`, and truncating it to fit a subject
+  destroys the one property worth recording, that you can follow it back to the
+  artifact. A typed contribution still says nothing.
 - `workstream_use` / `teamctx workstream use` now records a personal
   preference. It no longer writes `activeWorkstream` to the shared config, and
   no longer creates a commit — switching workstream stopped moving everyone
