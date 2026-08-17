@@ -12,9 +12,13 @@ const fake = {
   auth: () => ({ ok: false, help: 'set FAKE_TOKEN' }),
   list: async () => ({ items: [], skipped: [] }),
   fetch: async () => ({ id: 'x', text: '' }),
-  authorize: async ({ ask, askSecret, log }) => {
+  authorize: async ({ ask, askSecret, loopback, log }) => {
     log?.('setup instructions');
-    return { FAKE_KEY: await ask('Key'), FAKE_SECRET: await askSecret('Secret') };
+    const values = { FAKE_KEY: await ask('Key'), FAKE_SECRET: await askSecret('Secret') };
+    // Providers that dropped the paste-a-code flow need a listener; the
+    // connector never builds one itself.
+    if (loopback) values.FAKE_CODE = (await loopback({ buildUrl: uri => uri })).code;
+    return values;
   },
 };
 
@@ -133,6 +137,16 @@ describe('authorizeConnector', () => {
   it('falls back to the plain prompt when no masking one is given', async () => {
     const r = await authorizeConnector({ from: 'fakebox', cwd, env: {}, ask: answers(['k', 's']) });
     expect(r.keys).toContain('FAKE_SECRET');
+  });
+
+  it('hands the loopback listener to connectors that need one', async () => {
+    // Google removed the paste-a-code flow, so Drive cannot do what Dropbox
+    // does. The listener is shared rather than built inside a connector.
+    const r = await authorizeConnector({
+      from: 'fakebox', cwd, env: {}, ask: answers(['k', 's']),
+      loopback: async ({ buildUrl }) => ({ code: `code-for-${buildUrl('http://127.0.0.1:1')}` }),
+    });
+    expect(readFileSync(envPath(), 'utf-8')).toContain('FAKE_CODE=code-for-http://127.0.0.1:1');
   });
 
   it('writes nothing when the flow fails', async () => {

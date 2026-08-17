@@ -1,11 +1,14 @@
 import { ask, askSecret } from '../prompt.js';
+import { awaitLoopbackCode } from '../oauth-loopback.js';
 import { authorizeConnector, NoAuthorizeError, connectorsWithAuthorize } from './auth.core.js';
 import { UnknownConnectorError, listConnectors } from '../../src/connectors/index.js';
 
 export async function authCommand(from, opts = {}) {
   let result;
   try {
-    result = await authorizeConnector({ from, ask, askSecret, log: console.log, envFile: opts.envFile });
+    result = await authorizeConnector({
+      from, ask, askSecret, loopback: awaitLoopbackCode, log: console.log, envFile: opts.envFile,
+    });
   } catch (err) {
     if (err instanceof UnknownConnectorError) {
       console.error(`\n${err.message}\n`);

@@ -28,7 +28,7 @@ import * as folder from './folder.js';
  *
  * A connector may also export:
  *
- *   authorize({ ask, askSecret, log, env }) → { ENV_VAR: value, … }   // optional
+ *   authorize({ ask, askSecret, loopback, log, env }) → { ENV_VAR: value, … }  // optional
  *
  * which `teamctx auth <connector>` runs to obtain long-lived credentials and
  * write them to `.env.local`. Optional because it makes no sense for `folder`,
