@@ -86,11 +86,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while listing rather than failing mid-import.
   Credentials come from `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` and
   `DROPBOX_REFRESH_TOKEN` (or a short-lived `DROPBOX_ACCESS_TOKEN` on its own),
-  exchanged lazily on the first request. Dropbox's OAuth flow needs no redirect
-  URI — it shows you a code to paste back — so setup is a console app and a
-  paste, with no browser listener. Design notes:
+  exchanged lazily on the first request. Design notes:
   [docs/proposals/import-dropbox.md](docs/proposals/import-dropbox.md).
   Closes #25.
+- **`teamctx auth <connector>`** — log in to an import connector once and keep
+  working. It prints the provider's app-setup steps, asks for what it needs,
+  shows an authorization URL, takes the code pasted back, and saves the
+  resulting long-lived credentials to `.env.local`.
+  Previously every connector's help ended with some version of "exchange it
+  once for a refresh token", which in practice meant writing a curl command.
+  Dropbox is the first connector to implement it; its flow needs no redirect
+  URI, so nothing listens on your machine and no port is opened.
+  `authorize` is **optional** on the connector contract and purely additive —
+  `auth(env)` still reads the environment, so credentials set by hand keep
+  working and `folder` is unaffected. A connector supplies only the
+  provider-specific parts; prompting, merging the file and never printing a
+  secret are shared.
+  The env file is merged rather than rewritten, so a provider key already
+  living there survives; it is written `0600`, only variable *names* are ever
+  printed, and a failed login writes nothing.
 
 ### Changed
 - **Contributions record where they came from in the git history.** The commit
