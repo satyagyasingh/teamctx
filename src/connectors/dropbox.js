@@ -93,7 +93,7 @@ export function auth(env = process.env) {
  * means no shared quota, no app to get suspended, and no third party in the
  * path between a team and their own files.
  */
-export async function authorize({ ask, env = process.env, log = () => {} } = {}) {
+export async function authorize({ ask, askSecret = ask, env = process.env, log = () => {} } = {}) {
   log(`
 Dropbox needs an app of your own — teamctx ships none, so nothing is shared
 between installs and no quota is pooled.
@@ -105,9 +105,11 @@ between installs and no quota is pooled.
   4. Settings tab: copy the App key and App secret
 `);
 
+  // The app key is a client id — public by design, and worth showing in full so
+  // it can be checked against the console. The secret is not.
   const appKey = (await ask('App key', env.DROPBOX_APP_KEY || '')) || '';
   if (!appKey) throw new Error('dropbox: an app key is required');
-  const appSecret = (await ask('App secret', env.DROPBOX_APP_SECRET || '')) || '';
+  const appSecret = (await askSecret('App secret', env.DROPBOX_APP_SECRET || '')) || '';
   if (!appSecret) throw new Error('dropbox: an app secret is required');
 
   const url = `https://www.dropbox.com/oauth2/authorize?client_id=${encodeURIComponent(appKey)}`

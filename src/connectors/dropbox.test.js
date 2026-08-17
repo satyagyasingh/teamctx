@@ -165,6 +165,36 @@ describe('authorize', () => {
     expect(asked[0]).toEqual(['App key', 'existing-key']);
   });
 
+  it('asks for the secret through the masking prompt, not the plain one', async () => {
+    // An app key is a client id — public by design, and worth showing in full
+    // so it can be checked against the console. The secret is not, and echoing
+    // a stored one back would put it in scrollback and shell history.
+    const plain = [];
+    const masked = [];
+    globalThis.fetch = exchanged({ refresh_token: 'r' });
+
+    await dropbox.authorize({
+      ask: async (q, d) => { plain.push(q); return d || 'typed'; },
+      askSecret: async (q, d) => { masked.push(q); return d || 'typed'; },
+      env: { DROPBOX_APP_KEY: 'k', DROPBOX_APP_SECRET: 'the-real-secret' },
+    });
+
+    expect(masked).toContain('App secret');
+    expect(plain, 'the secret must not go through the echoing prompt').not.toContain('App secret');
+  });
+
+  it('keeps the real secret when the user accepts the masked default', async () => {
+    // The mask is display only; pressing enter has to round-trip the true
+    // value or the login silently breaks.
+    globalThis.fetch = exchanged({ refresh_token: 'r' });
+    const values = await dropbox.authorize({
+      ask: async (q, d) => d || 'typed',
+      askSecret: async (q, d) => d,
+      env: { DROPBOX_APP_KEY: 'k', DROPBOX_APP_SECRET: 'the-real-secret' },
+    });
+    expect(values.DROPBOX_APP_SECRET).toBe('the-real-secret');
+  });
+
   it('explains a stale authorization code rather than passing the raw error through', async () => {
     // Codes are single-use and expire in minutes — easily the most common way
     // this step fails, and "invalid_grant" explains nothing.

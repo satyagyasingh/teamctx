@@ -79,13 +79,13 @@ export function upsertEnv(source, values) {
  * and shell history.
  */
 export async function authorizeConnector({
-  from, ask, log = () => {}, env = process.env,
+  from, ask, askSecret = ask, log = () => {}, env = process.env,
   cwd = process.cwd(), envFile = '.env.local',
 } = {}) {
   const connector = getConnector(from);
   if (typeof connector.authorize !== 'function') throw new NoAuthorizeError(connector.name);
 
-  const values = await connector.authorize({ ask, env, log });
+  const values = await connector.authorize({ ask, askSecret, env, log });
   const keys = Object.keys(values || {});
   if (keys.length === 0) throw new Error(`${connector.name}: the login flow returned no credentials`);
 
