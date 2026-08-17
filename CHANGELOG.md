@@ -67,6 +67,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one PR each on top of this. Design notes:
   [docs/proposals/import-connectors.md](docs/proposals/import-connectors.md).
   Closes #21.
+- **`teamctx auth <connector>`** — log in to an import connector once and keep
+  working. It runs the connector's login flow and saves the resulting long-lived
+  credentials to `.env.local`.
+  Without it, a connector's help can only end with some version of "exchange it
+  once for a refresh token", which in practice means "write your own curl
+  command" — so the contract gains an optional `authorize` alongside `auth`.
+  Optional because it makes no sense for `folder`, and purely additive because
+  `auth(env)` still reads the environment: credentials set by hand keep working
+  and no existing connector changes. A connector supplies only the
+  provider-specific parts; prompting, merging the env file and never printing a
+  secret are shared.
+  The env file is merged rather than rewritten, so a provider key already living
+  there survives; it is written `0600`, only variable *names* are ever printed,
+  and a failed login writes nothing. An existing value offered back as a prompt
+  default is masked (`sl.u********TAIL`), so re-running the command never echoes
+  a live credential into scrollback.
 
 ### Changed
 - **Contributions record where they came from in the git history.** The commit
