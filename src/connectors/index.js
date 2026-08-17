@@ -26,6 +26,21 @@ import * as folder from './folder.js';
  * `auth` returns a result rather than throwing, so a missing token becomes
  * "set SLACK_TOKEN in .env.local" instead of a stack trace. Credentials come
  * from the environment — never from config.json, which is committed.
+ *
+ * A connector may also export:
+ *
+ *   authorize({ ask, env, log }) → { ENV_VAR: value, … }     // optional
+ *
+ * which `teamctx auth <connector>` runs to obtain long-lived credentials and
+ * write them to `.env.local`. It is optional because it makes no sense for
+ * `folder`, and additive because `auth` still reads the environment either way
+ * — a user who prefers to paste the variables in by hand never has to run it.
+ *
+ * It exists because every remote connector's `help` was otherwise ending with
+ * some version of "…and keep the refresh token it returns", which quietly means
+ * "write your own curl command". The connector owns only the provider-specific
+ * parts; prompting, file writing, and never printing a secret are handled once
+ * in cli/commands/auth.core.js.
  */
 
 const CONNECTORS = { dropbox, folder };
