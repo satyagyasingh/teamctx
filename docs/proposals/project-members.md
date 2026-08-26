@@ -133,35 +133,81 @@ Three things the implementation has to get right:
 repository is a bigger act than noting them on a roster and should be asked
 for.
 
-## Phase 3 — non-collaborator members (deferred)
+## Phase 3 — members who have no GitHub account
 
-Recorded because the decision matters, not because it is being built.
+Phase 1 and 2 assume a member is, or becomes, a GitHub collaborator. Most are
+not going to be. GitHub is where a teamctx project is *stored*; it is not who
+the people on it are, and a marketing lead invited to contribute context has no
+reason to open a GitHub account to do it.
 
-The idea is that a member who is *not* a GitHub collaborator still works,
-using the manager's credentials for reads and writes while commits attribute
-the member.
+Three things stand between an email address and a contribution. Two are done.
 
-**Locally this is already true and needs nothing.** A member with a clone uses
-their own git; teamctx is not in the credential path at all.
+| | Status |
+| --- | --- |
+| Attribution — whose name the commit carries | done (phase 1) |
+| An AI key they can use | done — a project-shared key |
+| Identity — proving they are that email | **this phase** |
 
-**Hosted, it does not work and cannot without a stored credential.** A session
-is built from the caller's own GitHub token; a non-collaborator's token cannot
-read a private repo, so there is no session to build. Making it work means
-holding a `repo`-scoped credential for the project server-side and using it for
-anyone the roster names.
+### Identity: sign in with Google
 
-That inverts a property teamctx currently has. The manager gate was hardened
-so `review_approve` reads only the authenticated actor and accepts no claimed
-identity. If member writes run on a stored manager token, then whoever can edit
-`members` in `config.json` — a file in the repo — can write as the manager. The
-blast radius is bounded, since members can queue contributions but not approve
-them, but it is a real change and should be chosen rather than arrived at.
+An invite names an email. Anyone can type an email, so the invite proves
+nothing on its own; the member has to prove the address is theirs.
 
-If it is wanted, the credential should be a **GitHub App installation token**
-rather than a stored personal token: scoped to the one repo, short-lived,
-revocable from repo settings, and it survives the manager leaving. An OAuth
-App's `repo` scope is all-or-nothing across every repository the user can
-reach, which is far more authority than this needs.
+Running that ourselves means a mail sender, deliverability, and a code-entry
+flow — a lot of machinery to establish something Google already established.
+Google's OAuth returns `email` together with `email_verified`, and a Google
+account is a login this exact audience already has. So teamctx does not verify
+emails. It accepts a verification someone else already did.
+
+**The rule: a member is authenticated when a verified Google email matches a
+roster entry.** Both halves are load-bearing. Without `email_verified` a Google
+account with an unconfirmed address could claim anyone's invite; without the
+roster check, any Google account in the world is a member of every project.
+
+`/authorize` stops redirecting straight to GitHub and asks which account the
+person has. GitHub keeps the path it has today. Google is new, and carries no
+GitHub token at all — which is the whole point, and also the problem the next
+section solves.
+
+### Access: the project lends its own GitHub credential
+
+A Google member has no GitHub token, so there is no session to build from — a
+private repo cannot be read, let alone written.
+
+The manager stores a credential against the project, and calls from members who
+have none of their own run on it. This is the same shape as the shared AI key
+(#48) and should read the same way: a project-level credential, used by anyone
+on the project who cannot bring their own.
+
+Three properties this must have, because it is the piece that carries real
+authority:
+
+- **Pinned to one repository.** The credential is stored under
+  `owner/repo` and looked up by the `owner/repo` in the request URL, so it can
+  only ever serve the project it was stored for. This matters more than it
+  looks: `api/mcp/[owner]/[repo].js` takes owner and repo from the URL and never
+  checks access, because today every call runs on the caller's own token and
+  GitHub simply 404s them. A shared credential removes that accident of safety,
+  so the pinning has to be deliberate.
+- **The roster is the gate.** Before the credential is used, the member's
+  verified email must appear in `config.json`'s `members`. Reading that needs
+  the credential, so the order is: look up credential → read config → check
+  roster → only then serve the request.
+- **Members still cannot approve.** `assertManager` compares the resolved actor
+  against `managerKey`, and a Google member's actor is their roster entry, never
+  the manager's. Contributions queue for review exactly as they do today.
+
+The honest cost, stated plainly: the manager's write access is exercised on
+behalf of other people. That is not a side effect to be minimised — it is the
+feature. The manager invited these people precisely so they could contribute,
+and the alternative is that they cannot contribute at all.
+
+### What a member can then do
+
+Everything the MCP surface offers except approving: read context, see and
+compile their tasks, and submit contributions that queue for the manager's
+review — attributed to their own name, paid for by the project's key, written
+with the project's credential. No GitHub account anywhere in that sentence.
 
 ## Out of scope
 
@@ -182,11 +228,9 @@ reach, which is far more authority than this needs.
 
 ## Open questions
 
-- **What can an email-only member actually do?** They cannot be invited and
-  cannot authenticate to a private repo. Today that leaves them as a roster
-  entry: a name for task ownership and for attribution when they contribute
-  from a clone. That may be enough, but it should be said out loud rather than
-  implied.
+- **Answered by phase 3: an email-only member is a full contributor.** They
+  sign in with Google, act on the project's credential, and their work queues
+  for review under their own name. What they cannot do is approve it.
 - **Should `member add` warn when the login is not a collaborator and
   `--invite` was not passed?** It is the common mistake, and silence makes it
   look like access was granted when it was not.
