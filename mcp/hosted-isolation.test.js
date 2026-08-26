@@ -247,6 +247,70 @@ describe('tasks on the hosted server', () => {
     expect(r.committed).toBe(false);
   });
 
+  // Task tools are deliberately ungated — any member can act on any task, the
+  // same as the CLI. The risk that buys is not a permission leak but a *scope*
+  // leak: `list_tasks` with no arguments has to mean "my workstream", and the
+  // active workstream is per-person preference, not repo state. If it resolved
+  // from the config instead of the caller, Bob would open his task list and
+  // find Alice's.
+  it('scopes an unfiltered list to the caller, not to whoever switched last', async () => {
+    const session = fakeSession();
+
+    await asUser(session, ALICE, h => h.workstream_use({ id: 'engineering-hiring' }));
+    await asUser(session, ALICE, h => json(h.task_add({ title: 'Draft the hiring rubric' })));
+    await asUser(session, BOB, h => json(h.task_add({ title: 'Reconcile the ledger' })));
+
+    const forAlice = await asUser(session, ALICE, h => json(h.list_tasks()));
+    const forBob = await asUser(session, BOB, h => json(h.list_tasks()));
+
+    expect(forAlice.scope).toBe('workstream engineering-hiring');
+    expect(forAlice.tasks.map(t => t.id)).toEqual(['t-draft-the-hiring-rubric']);
+
+    // Bob never switched, so he is still on main and sees only what lives there.
+    expect(forBob.scope).toBe('workstream main');
+    expect(forBob.tasks.map(t => t.id)).toEqual(['t-reconcile-the-ledger']);
+  });
+
+  it('gives each caller their own task by default, and both of them --all', async () => {
+    const session = fakeSession();
+    await asUser(session, ALICE, h => h.workstream_use({ id: 'engineering-hiring' }));
+    await asUser(session, ALICE, h => json(h.task_add({ title: 'Draft the hiring rubric' })));
+    await asUser(session, BOB, h => json(h.task_add({ title: 'Reconcile the ledger' })));
+
+    const everything = await asUser(session, BOB, h => json(h.list_tasks({ all: true })));
+    expect(everything.tasks.map(t => t.id).sort())
+      .toEqual(['t-draft-the-hiring-rubric', 't-reconcile-the-ledger']);
+  });
+
+  it('records the owner as the caller, not as config.me', async () => {
+    // `config.me` is 'whoever-ran-init' — a value neither of them should ever
+    // be labelled with.
+    const session = fakeSession();
+    const a = await asUser(session, ALICE, h => json(h.task_add({ title: 'Ship the ledger' })));
+    const b = await asUser(session, BOB, h => json(h.task_add({ title: 'Close the books' })));
+    expect(a.task.owner).toBe('Alice Example');
+    expect(b.task.owner).toBe('Bob Example');
+  });
+
+  it('lets Bob act on a task Alice raised', async () => {
+    const session = fakeSession();
+    await asUser(session, ALICE, h => json(h.task_add({ title: 'Ship the ledger' })));
+
+    // Ungated on purpose: picking up a colleague's task is the ordinary case,
+    // and the manager gate exists for approving work, not for doing it.
+    const assigned = await asUser(session, BOB,
+      h => json(h.task_assign({ id: 't-ship-the-ledger', owner: 'Bob Example' })));
+    expect(assigned.task.owner).toBe('Bob Example');
+
+    const done = await asUser(session, BOB, h => json(h.task_done({ id: 't-ship-the-ledger' })));
+    expect(done.task.status).toBe('done');
+
+    // And Alice sees the change — one repo, two callers, no per-person copy.
+    const seen = await asUser(session, ALICE, h => json(h.get_task({ id: 't-ship-the-ledger' })));
+    expect(seen.status).toBe('done');
+    expect(seen.owner).toBe('Bob Example');
+  });
+
   it('deletes a task and its prompt through the session', async () => {
     const session = fakeSession();
     await asUser(session, ALICE, h => json(h.task_add({ title: 'Ship the ledger' })));
