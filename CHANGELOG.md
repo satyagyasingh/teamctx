@@ -36,6 +36,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   between a clone and a chat client, either of which would quietly stop a
   member's own work being theirs. Existing tasks carry no key and still match by
   name. `mine` with `owner` is an error rather than an intersection. Part of #46.
+- **Team members no longer need a GitHub account.** GitHub is where a teamctx
+  project is stored, not who the people on it are, but joining one meant opening
+  a GitHub account, being added as a collaborator, and authorising GitHub OAuth
+  — which for a non-technical member was the whole onboarding blocker.
+  A member invited by email can now sign in with Google. teamctx does not verify
+  addresses itself: it reads `email_verified` from Google and refuses anything
+  else, because a Google account can be created against an address its holder
+  does not control. The verified address must then match a roster entry, or any
+  Google account would be a member of every project.
+  Such a member has no GitHub token, so the project lends one: the manager
+  stores a credential from `/settings`, pinned to a single repository and usable
+  only by people the roster names. Commits are attributed to the member, and
+  their contributions still queue for the manager's review — `assertManager`
+  compares the resolved actor against `managerKey`, which a member never is.
+  Both halves are optional. Without `GOOGLE_OAUTH_CLIENT_ID` the sign-in flow
+  goes straight to GitHub exactly as before. See `docs/mcp-hosted-setup.md`.
 - **Project members.** `teamctx member add <username|email>`, `member list`,
   `member rm`, plus `list_members`, `member_add` and `member_rm` over MCP. A
   teamctx project knew its manager and, implicitly, anyone holding a clone — it
