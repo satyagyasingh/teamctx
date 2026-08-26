@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import { InvalidGrantError, InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { kvGet, kvSet, kvTake, kvDelete, keys, TTL } from './kv.js';
+import { googleUserFromCode, googleAuthorizeUrl } from './google.js';
 
 /**
  * teamctx's OAuth 2.1 authorization server.
@@ -38,14 +39,22 @@ export class TeamctxOAuthProvider {
    * @param {string} opts.githubClientSecret
    * @param {string} opts.baseUrl  Public origin, e.g. https://teamctx.vercel.app
    */
-  constructor({ githubClientId, githubClientSecret, baseUrl }) {
+  constructor({ githubClientId, githubClientSecret, googleClientId, googleClientSecret, baseUrl }) {
     this.githubClientId = githubClientId;
     this.githubClientSecret = githubClientSecret;
+    // Optional. Without it teamctx works exactly as before, for GitHub accounts
+    // only — which is what every existing deployment already expects.
+    this.googleClientId = googleClientId || null;
+    this.googleClientSecret = googleClientSecret || null;
     this.baseUrl = String(baseUrl || '').replace(/\/$/, '');
   }
 
   get githubCallbackUrl() {
     return `${this.baseUrl}/oauth/github/callback`;
+  }
+
+  get googleCallbackUrl() {
+    return `${this.baseUrl}/oauth/google/callback`;
   }
 
   // ---- Registered clients (RFC 7591 dynamic client registration) ----
@@ -79,13 +88,62 @@ export class TeamctxOAuthProvider {
       resource: params.resource ? String(params.resource) : null,
     }, { ttlSeconds: TTL.pending });
 
+    // Straight to GitHub when Google is not configured, so a deployment that
+    // never set it up behaves exactly as it did before.
+    if (!this.googleClientId) return res.redirect(this.githubAuthorizeUrl(state));
+    res.redirect(`${this.baseUrl}/oauth/choose?state=${encodeURIComponent(state)}`);
+  }
+
+  githubAuthorizeUrl(state) {
     const url = new URL(GITHUB_AUTHORIZE);
     url.searchParams.set('client_id', this.githubClientId);
     url.searchParams.set('redirect_uri', this.githubCallbackUrl);
     url.searchParams.set('scope', GITHUB_SCOPES);
     url.searchParams.set('state', state);
+    return url.toString();
+  }
 
-    res.redirect(url.toString());
+  /**
+   * The same handshake as GitHub's, with the identity coming from Google.
+   *
+   * No GitHub token exists at the end of this, which is deliberate: the member
+   * has no GitHub account. Repository access comes from the credential the
+   * project lends, and only after the roster confirms the address.
+   */
+  async handleGoogleCallback({ code, state, error, errorDescription }) {
+    const pending = await kvTake(keys.pending(state));
+    if (!pending) {
+      throw new OAuthCallbackError('invalid_state',
+        'Authorization request expired or was already used. Start the connection again.');
+    }
+    const back = new URL(pending.redirectUri);
+    if (pending.clientState) back.searchParams.set('state', pending.clientState);
+
+    if (error) {
+      back.searchParams.set('error', error);
+      if (errorDescription) back.searchParams.set('error_description', errorDescription);
+      return back.toString();
+    }
+
+    const googleUser = await googleUserFromCode({
+      code,
+      clientId: this.googleClientId,
+      clientSecret: this.googleClientSecret,
+      redirectUri: this.googleCallbackUrl,
+    });
+
+    const ourCode = newToken(24);
+    await kvSet(keys.code(ourCode), {
+      clientId: pending.clientId,
+      codeChallenge: pending.codeChallenge,
+      redirectUri: pending.redirectUri,
+      scopes: pending.scopes,
+      resource: pending.resource,
+      googleUser,
+    }, { ttlSeconds: TTL.code });
+
+    back.searchParams.set('code', ourCode);
+    return back.toString();
   }
 
   // ---- Step 2: GitHub bounces the user back to us ----
@@ -197,6 +255,7 @@ export class TeamctxOAuthProvider {
       clientId: client.client_id,
       githubToken: record.githubToken,
       githubUser: record.githubUser,
+      googleUser: record.googleUser,
       scopes: record.scopes,
     });
   }
@@ -213,14 +272,18 @@ export class TeamctxOAuthProvider {
       clientId: client.client_id,
       githubToken: record.githubToken,
       githubUser: record.githubUser,
+      googleUser: record.googleUser,
       scopes: scopes?.length ? scopes : record.scopes,
     });
   }
 
-  async #issueTokens({ clientId, githubToken, githubUser, scopes = [] }) {
+  async #issueTokens({ clientId, githubToken, githubUser, googleUser, scopes = [] }) {
     const accessToken = newToken();
     const refreshToken = newToken();
-    const payload = { clientId, githubToken, githubUser, scopes };
+    // Exactly one of githubUser / googleUser is set. A Google session carries no
+    // GitHub token at all — that is the point of it, and what makes the
+    // project's own credential necessary downstream.
+    const payload = { clientId, githubToken, githubUser, googleUser, scopes };
 
     await kvSet(keys.token(accessToken), payload, { ttlSeconds: TTL.accessToken });
     await kvSet(keys.refresh(refreshToken), payload, { ttlSeconds: TTL.refreshToken });
@@ -250,6 +313,7 @@ export class TeamctxOAuthProvider {
       extra: {
         githubToken: record.githubToken,
         githubUser: record.githubUser,
+        googleUser: record.googleUser,
       },
     };
   }
@@ -277,7 +341,13 @@ export function providerFromEnv(env = process.env) {
     || (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : null);
 
   if (!githubClientId || !githubClientSecret || !baseUrl) return null;
-  return new TeamctxOAuthProvider({ githubClientId, githubClientSecret, baseUrl });
+  return new TeamctxOAuthProvider({
+    githubClientId, githubClientSecret, baseUrl,
+    // Optional: without it the sign-in chooser never appears and the flow is
+    // GitHub-only, exactly as before.
+    googleClientId: env.GOOGLE_OAUTH_CLIENT_ID || null,
+    googleClientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET || null,
+  });
 }
 
 export function oauthConfigStatus(env = process.env) {
