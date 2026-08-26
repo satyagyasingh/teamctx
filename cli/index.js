@@ -25,6 +25,7 @@ import {
   snapshotApproveCommand, snapshotRejectCommand, snapshotCurrentCommand,
 } from './commands/snapshot.js';
 import { setupCommand } from './commands/setup.js';
+import { memberAddCommand, memberListCommand, memberRmCommand } from './commands/member.js';
 import { mcpCommand } from './commands/mcp.js';
 import { workstreamSuggestCommand, workstreamListCommand, workstreamUseCommand, workstreamSplitCommand } from './commands/workstream.js';
 import {
@@ -99,6 +100,16 @@ program.command('stats').description('Team metrics from your own history — no 
 program.command('mcp').description('Start MCP server over stdio (for Claude Code, Claude Desktop, Cursor, etc.)')
   .option('-p, --project <path>', 'Absolute path to the teamctx project (defaults to $TEAMCTX_PROJECT_DIR or cwd)')
   .action(mcpCommand);
+
+const member = program.command('member').description('Who is on this project');
+member.command('add <username-or-email>').description('Add someone to the project (manager only)')
+  .option('--name <name>', 'Display name, if different from the handle')
+  .option('--invite', 'Also invite them to the GitHub repository')
+  .option('--permission <level>', 'Repository permission when inviting (pull|triage|push|maintain|admin)', 'push')
+  .action(memberAddCommand);
+member.command('list').description('List project members').action(memberListCommand);
+member.command('rm <username-or-email>').description('Remove someone from the project roster (does not revoke GitHub access)')
+  .action(memberRmCommand);
 
 const review = program.command('review').description('Review pending contributions awaiting manager approval');
 review.command('list').description('List all pending contributions').action(reviewListCommand);

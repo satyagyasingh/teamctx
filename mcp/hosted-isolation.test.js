@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createHash } from 'crypto';
 import { makeHandlers } from './server.js';
 import { runWithSession } from '../src/session-context.js';
@@ -49,10 +49,12 @@ function fakeSession() {
     ['.teamctx/workstreams/engineering-hiring.json', { content: JSON.stringify({ id: 'engineering-hiring', name: 'Engineering Hiring', whys: [] }), sha: 'd' }],
   ]);
   const commits = [];
+  const commitOpts = [];
   return {
     owner: OWNER,
     repo: REPO,
     commits,
+    commitOpts,
     read: p => files.get(p) || null,
     write: (p, c) => files.set(p, { content: String(c), sha: null }),
     del: p => files.delete(p),
@@ -63,7 +65,7 @@ function fakeSession() {
         .map(p => p.slice(prefix.length))
         .sort();
     },
-    commit: async msg => { commits.push(msg); return { committed: true }; },
+    commit: async (msg, opts) => { commits.push(msg); commitOpts.push(opts || {}); return { committed: true }; },
     configJson: () => JSON.parse(files.get('.teamctx/config.json').content),
   };
 }
@@ -327,3 +329,53 @@ function hashOf(ws) {
     .update(JSON.stringify({ name: ws?.name || '', whys: ws?.whys || [] }))
     .digest('hex').slice(0, 16);
 }
+
+describe('project members on the hosted server', () => {
+  it('lets the manager add someone, and records who added them', async () => {
+    const session = fakeSession();
+    const r = await asUser(session, ALICE, h => json(h.member_add({ ref: 'priyar' })));
+    expect(r.member.login).toBe('priyar');
+    expect(session.configJson().members).toHaveLength(1);
+  });
+
+  it('refuses a non-manager, and leaves the roster alone', async () => {
+    // Adding yourself to the roster would otherwise be the way past every
+    // other gate on the project.
+    const session = fakeSession();
+    await expect(asUser(session, BOB, h => h.member_add({ ref: 'priyar' })))
+      .rejects.toThrow(/manager/i);
+    expect(session.configJson().members || []).toHaveLength(0);
+  });
+
+  it('attributes the commit to the caller, not to the token', async () => {
+    // Without this every hosted commit is authored by whoever's credential
+    // made the write, so a whole team shows up as one contributor in git log.
+    const session = fakeSession();
+    await asUser(session, ALICE, h => json(h.member_add({ ref: 'priyar' })));
+    const author = session.commitOpts[0]?.author;
+    expect(author?.name).toBe(ALICE.name);
+    expect(author?.email).toMatch(/@users\.noreply\.github\.com$/);
+  });
+
+  it('does not invite anyone unless asked', async () => {
+    const session = fakeSession();
+    globalThis.fetch = vi.fn();
+    await asUser(session, ALICE, h => json(h.member_add({ ref: 'priyar' })));
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('lists members back', async () => {
+    const session = fakeSession();
+    await asUser(session, ALICE, h => json(h.member_add({ ref: 'priyar', name: 'Priya Raman' })));
+    const { members } = await asUser(session, BOB, h => json(h.list_members({})));
+    expect(members[0].name).toBe('Priya Raman');
+  });
+
+  it('removing from the roster does not claim to revoke access', async () => {
+    const session = fakeSession();
+    await asUser(session, ALICE, h => json(h.member_add({ ref: 'priyar' })));
+    const r = await asUser(session, ALICE, h => json(h.member_rm({ ref: 'priyar' })));
+    expect(r.stillHasRepoAccess).toBe(true);
+    expect(r.reportBack).toMatch(/GitHub access is unchanged/);
+  });
+});
