@@ -151,6 +151,14 @@ export const keys = {
   /** Which projects one user shares a key with, so the settings page can show them. */
   sharedProjects: githubUserId => `teamctx:aikey:shared-by:${githubUserId}`,
   /**
+   * A GitHub credential the project lends to members who have none of their
+   * own. Keyed by the repository it serves and looked up by the owner/repo in
+   * the request URL, so it can only ever act on the project it was stored for.
+   */
+  projectGhCred: (owner, repo) => `teamctx:ghcred:project:${owner}/${repo}`,
+  /** Which projects one user lends GitHub access to, for the settings page. */
+  lentProjects: githubUserId => `teamctx:ghcred:lent-by:${githubUserId}`,
+  /**
    * Per-user, per-project settings (display name, active workstream). These are
    * personal, so they deliberately live here rather than in the repo's
    * config.json — see src/prefs.js. Long-lived.

@@ -51,6 +51,26 @@ export function actorFromGithubUser(user) {
   return { key: `github:${user.id}`, name, login: user.login || null, source: 'github' };
 }
 
+/**
+ * The actor for someone who signed in with Google.
+ *
+ * Their identity is the roster entry, not the Google account: a person who
+ * contributes from a clone one week and through their assistant the next must
+ * come out as the same author both times, and the roster key is the only thing
+ * both paths share. The Google address is what proved they may claim that
+ * entry; it is not a second identity.
+ */
+export function actorFromMember(member, googleUser) {
+  if (!member) return null;
+  return {
+    key: member.key || `git:${googleUser.email}`,
+    name: member.name || googleUser.name,
+    login: member.login || null,
+    email: googleUser.email,
+    source: 'google',
+  };
+}
+
 export function actorFromConfig(config) {
   const me = (config?.me || '').trim();
   if (!me) return { key: 'name:unknown', name: 'unknown', login: null, source: 'fallback' };

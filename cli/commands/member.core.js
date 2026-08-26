@@ -84,6 +84,23 @@ function findMember(members, ref) {
  * the login-only form still attributes; without a login there is nothing to
  * attribute to and the caller falls back to the actor's own email.
  */
+/**
+ * The roster entry for a verified email address, or null.
+ *
+ * This is the gate in front of the project's shared GitHub credential, so it
+ * takes an address Google has already vouched for and nothing else. Matching on
+ * a claimed address would make the roster decorative: anyone could name someone
+ * else's invite and be handed the project's write access.
+ *
+ * Matched case-insensitively because email addresses are, and because the
+ * manager types the invite by hand.
+ */
+export function memberByEmail(members, email) {
+  const wanted = String(email ?? '').trim().toLowerCase();
+  if (!wanted) return null;
+  return (members || []).find(m => String(m.email ?? '').toLowerCase() === wanted) || null;
+}
+
 export function noreplyEmail({ key, login } = {}) {
   if (!login) return null;
   const id = /^github:(\d+)$/.exec(key || '')?.[1];

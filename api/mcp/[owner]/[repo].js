@@ -3,6 +3,7 @@ import { runWithAiKey } from '../../../src/ai-context.js';
 import { runWithActor, actorFromGithubUser } from '../../../src/actor.js';
 import { providerFromEnv } from '../../../src/oauth/provider.js';
 import { kvGet, keys } from '../../../src/oauth/kv.js';
+import { resolveGoogleMember } from '../../../src/oauth/member-access.js';
 
 /**
  * Hosted MCP endpoint.  POST /api/mcp/<owner>/<repo>
@@ -66,6 +67,7 @@ export default async function handler(req, res) {
   let apiKey = null;
   let aiProvider = null;
   let actor = null;
+  let googleUser = null;
 
   // 1 — OAuth bearer token
   const bearer = readBearer(req);
@@ -87,8 +89,24 @@ export default async function handler(req, res) {
       // meant an OpenAI key was handed to whatever provider the repo's config
       // named — usually Anthropic.
       aiProvider = stored?.provider ?? null;
+      googleUser = auth.extra?.googleUser ?? null;
     } catch {
       return unauthorized(req, res, owner, repo, 'The access token is invalid or has expired');
+    }
+
+    // Signed in with Google: no GitHub account, so no token of their own. The
+    // project's own credential serves them, but only once the roster confirms
+    // the verified address belongs to a member of *this* project.
+    if (!ghToken && googleUser) {
+      try {
+        const access = await resolveGoogleMember({
+          googleUser, owner, repo, ref: readParam(req, 'ref') || null,
+        });
+        ghToken = access.ghToken;
+        actor = access.actor;
+      } catch (err) {
+        return unauthorized(req, res, owner, repo, err.message);
+      }
     }
   }
 
