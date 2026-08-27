@@ -4,6 +4,7 @@ import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { providerFromEnv, oauthConfigStatus, GITHUB_SCOPES, OAuthCallbackError } from '../src/oauth/provider.js';
 import { kvGet, kvSet, kvTake, kvDelete, keys, TTL, isPersistent } from '../src/oauth/kv.js';
 import { googleAuthorizeUrl } from '../src/oauth/google.js';
+import { lendDecision } from '../src/oauth/lend-decision.js';
 
 /**
  * Single Vercel function serving every OAuth surface. `vercel.json` rewrites
@@ -380,22 +381,69 @@ app.post('/settings/unshare', async (req, res) => {
  * it. Whoever can already administer the repository is the person entitled to
  * make it.
  */
+/**
+ * May this person lend the project's GitHub access?
+ *
+ * The question teamctx actually cares about is "are you this project's
+ * manager", not "do you hold a GitHub permission bit". So the manager gate in
+ * the repo's own config.json is asked first: whoever ran `init` is the manager,
+ * which for the common case — you set the project up, you own the repo — makes
+ * this a step that simply passes instead of a second thing to go and arrange.
+ *
+ * Repository admin is the fallback for a project whose config has no manager
+ * pinned yet. Lending hands a credential to everyone the roster names, so
+ * without a manager recorded, the person who can administer the repository is
+ * the one entitled to decide.
+ */
+async function mayLend(user, ref) {
+  const headers = { Authorization: `Bearer ${user.token}`, Accept: 'application/vnd.github+json' };
+
+  const repoRes = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}`, { headers });
+  if (repoRes.status === 401) {
+    return { ok: false, why: 'GitHub rejected your sign-in. Sign out and sign in again.' };
+  }
+  if (repoRes.status === 404) {
+    return { ok: false, why: `No repository ${ref.owner}/${ref.repo}, or your GitHub account cannot see it.` };
+  }
+  if (!repoRes.ok) {
+    // Never fall through to a permissions message for a failure that was not
+    // about permissions — a rate limit reads as "you are not allowed" otherwise.
+    return { ok: false, why: `GitHub returned ${repoRes.status} for ${ref.owner}/${ref.repo}. Try again shortly.` };
+  }
+  const info = await repoRes.json().catch(() => ({}));
+
+  const cfgRes = await fetch(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/contents/.teamctx/config.json`, { headers });
+  if (cfgRes.status === 404) {
+    return { ok: false, why: `${ref.owner}/${ref.repo} is not a teamctx project — no .teamctx/config.json in it.` };
+  }
+  let config = null;
+  if (cfgRes.ok) {
+    try {
+      const body = await cfgRes.json();
+      config = JSON.parse(Buffer.from(body.content || '', 'base64').toString('utf8'));
+    } catch { /* unreadable config falls back to the admin check */ }
+  }
+
+  return lendDecision({ config, userId: user.id, isAdmin: !!info?.permissions?.admin, slug: `${ref.owner}/${ref.repo}` });
+}
+
 app.post('/settings/lend', async (req, res) => {
   const user = await currentUser(req);
   if (!user) return res.redirect(303, '/settings');
   const ref = parseRepoRef(req.body?.project);
   if (!ref) return backToSettings(res, 'Write the project as owner/repo.');
 
-  const check = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}`, {
-    headers: { Authorization: `Bearer ${user.token}`, Accept: 'application/vnd.github+json' },
-  });
-  if (check.status === 404) {
-    return backToSettings(res, `No repository ${ref.owner}/${ref.repo}, or you cannot see it.`);
+  // A session minted before this feature shipped carries no token, and every
+  // GitHub call below would 401. That surfaced as "you need admin access" to
+  // someone who owned the repository, which is the worst kind of wrong error:
+  // it names a cause the reader cannot act on and is not true.
+  if (!user.token) {
+    return backToSettings(res, 'Your sign-in predates this feature. Sign out and sign in again, then retry.');
   }
-  const info = await check.json().catch(() => ({}));
-  if (!info?.permissions?.admin) {
-    return backToSettings(res, `You need admin access to ${ref.owner}/${ref.repo} to lend it GitHub access.`);
-  }
+
+  const allowed = await mayLend(user, ref);
+  if (!allowed.ok) return backToSettings(res, allowed.why);
 
   const slug = `${ref.owner}/${ref.repo}`;
   await kvSet(keys.projectGhCred(ref.owner, ref.repo), {
