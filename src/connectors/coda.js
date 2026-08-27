@@ -45,7 +45,7 @@ const POLL_INTERVAL_MS = 700;
 const MAX_POLLS = 40;
 
 /** Only relevant with no selector, where "everything" is otherwise unbounded. */
-const MAX_DOCS = 25;
+export const MAX_DOCS = 25;
 
 export const name = 'coda';
 export const describe = 'Coda pages, by doc or page link';
@@ -293,7 +293,10 @@ async function exportMarkdown(a, docId, pageId, opts) {
   const path = `docs/${encodeURIComponent(docId)}/pages/${encodeURIComponent(pageId)}/export`;
 
   const started = await call(a, path, {
-    method: 'POST', body: { outputFormat: 'markdown' }, bucket: 'write', ...opts,
+    // `bucket` after the spread, matching the call above: this write has to be
+    // rate-limited as a write, and a caller passing `bucket` for some other
+    // reason should not be able to silently reclassify it.
+    method: 'POST', body: { outputFormat: 'markdown' }, ...opts, bucket: 'write',
   });
 
   for (let attempt = 0; attempt < MAX_POLLS; attempt++) {

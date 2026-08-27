@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as coda from './coda.js';
+import { MAX_DOCS } from './coda.js';
 
 const DOC = 'AbCd1234';
 const PAGE = 'canvas-xyz';
@@ -215,6 +216,44 @@ describe('list', () => {
     const { items, skipped } = await coda.list(authed(), `${DOC}/${PAGE}`, nowait);
     expect(items).toEqual([]);
     expect(skipped[0].reason).toMatch(/no exportable content \(embed\)/);
+  });
+});
+
+describe('list with no selector — every doc the token can see', () => {
+  it('walks each doc and returns the pages of all of them', async () => {
+    globalThis.fetch = route([
+      ['docs/d1/pages', json({ items: [codaPage('p1', 'Onboarding')] })],
+      ['docs/d2/pages', json({ items: [codaPage('p2', 'Runbook')] })],
+      ['docs?limit=100', json({ items: [{ id: 'd1' }, { id: 'd2' }] })],
+    ]);
+    const { items } = await coda.list(authed(), undefined, nowait);
+    expect(items.map(i => i.title)).toEqual(['Onboarding', 'Runbook']);
+  });
+
+  it('stops at the doc cap rather than walking an entire account', async () => {
+    // Every doc costs its own request, so an unbounded walk on a large account
+    // is a long silence followed by a rate limit.
+    const docs = Array.from({ length: MAX_DOCS + 5 }, (_, i) => ({ id: `d${i + 1}` }));
+    globalThis.fetch = route([
+      ['/pages', json({ items: [codaPage('p1', 'A page')] })],
+      ['docs?limit=100', json({ items: docs })],
+    ]);
+    const { items, skipped } = await coda.list(authed(), undefined, nowait);
+    expect(items).toHaveLength(MAX_DOCS);
+    expect(skipped).toHaveLength(1);
+  });
+
+  it('says why it stopped and what to do instead', async () => {
+    // A silent truncation reads as "that is all there is", which is the one
+    // thing it must not be mistaken for.
+    const docs = Array.from({ length: MAX_DOCS + 1 }, (_, i) => ({ id: `d${i + 1}` }));
+    globalThis.fetch = route([
+      ['/pages', json({ items: [codaPage('p1', 'A page')] })],
+      ['docs?limit=100', json({ items: docs })],
+    ]);
+    const { skipped } = await coda.list(authed(), undefined, nowait);
+    expect(skipped[0].reason).toMatch(new RegExp(`stopped at ${MAX_DOCS} docs`));
+    expect(skipped[0].reason, 'must name the way out').toMatch(/name a doc/);
   });
 });
 
