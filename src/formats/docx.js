@@ -173,14 +173,18 @@ export function textFromDocumentXml(xml) {
   const body = stripDropped(String(xml ?? ''));
   const lines = [];
 
-  for (const [, paragraph] of body.matchAll(/<w:p(?:\s[^>]*)?>([\s\S]*?)<\/w:p>/g)) {
+  for (const [, raw] of body.matchAll(/<w:p(?:\s[^>]*)?>([\s\S]*?)<\/w:p>/g)) {
+    // Paragraph properties carry <w:tabs><w:tab w:val=…/></w:tabs> — tab *stop
+    // definitions*, not content. They are indistinguishable from a real tab by
+    // shape, and would otherwise put separators in a paragraph that has none.
+    const paragraph = raw.replace(/<w:pPr(?:\s[^>]*)?>[\s\S]*?<\/w:pPr>/g, '');
     let text = '';
-    for (const [, run] of paragraph.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)) {
-      text += decodeXml(run);
+    // Text and tabs in one ordered pass, because the position is the whole
+    // point: a tab is a column separator in Word's idea of a table row, and
+    // collecting the runs alone turns `Name<tab>Age` into `NameAge`.
+    for (const m of paragraph.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab(?:\s[^>]*)?\/?>/g)) {
+      text += m[1] === undefined ? '\t' : decodeXml(m[1]);
     }
-    // A tab is a column separator in Word's idea of a table row, and losing it
-    // turns two cells into one word.
-    if (/<w:tab\b/.test(paragraph)) text = text.replace(/\s*$/, '');
     // Explicit line breaks inside one paragraph are still line breaks.
     lines.push(...(/<w:br\b/.test(paragraph) ? text.split('\n') : [text]));
   }

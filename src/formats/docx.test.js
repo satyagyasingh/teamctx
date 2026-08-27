@@ -102,6 +102,38 @@ describe('extracting text', () => {
       .toBe('one\ntwo');
   });
 
+  it('keeps a tab between the cells it separates', () => {
+    // Word writes a simple table row as one paragraph with tabs between the
+    // cells. Dropping the tab is not a formatting loss — it welds two values
+    // into one word, and `NameAge` is not a thing the distiller can read.
+    expect(doc(para('<w:r><w:t>Name</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>Age</w:t></w:r>')))
+      .toBe('Name	Age');
+  });
+
+  it('keeps every tab in a row, not just the first', () => {
+    expect(doc(para(
+      '<w:r><w:t>a</w:t></w:r><w:r><w:tab/></w:r>'
+      + '<w:r><w:t>b</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>c</w:t></w:r>',
+    ))).toBe('a	b	c');
+  });
+
+  it('drops a trailing tab rather than leaving a ragged line end', () => {
+    expect(doc(para('<w:r><w:t>only</w:t></w:r><w:r><w:tab/></w:r>'))).toBe('only');
+  });
+
+  it('ignores tab stops declared in paragraph properties', () => {
+    // <w:tabs><w:tab w:val=…/></w:tabs> inside w:pPr defines where tabs land.
+    // It is indistinguishable from a real tab by shape and is not content, so
+    // emitting it would put a separator in a paragraph that has none.
+    // Placed after another paragraph on purpose: a spurious leading tab on the
+    // very first line is swallowed by the final trim, so a one-paragraph case
+    // would pass whether the properties were stripped or not.
+    expect(doc(para(run('First line')) + para(
+      '<w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs></w:pPr>'
+      + '<w:r><w:t>Second line</w:t></w:r>',
+    ))).toBe('First line\nSecond line');
+  });
+
   it('returns nothing for a document with no text', () => {
     expect(doc(para() + para())).toBe('');
   });
