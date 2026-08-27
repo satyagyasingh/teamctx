@@ -48,7 +48,14 @@ export function actorFromGithubUser(user) {
   // GitHub's display name is optional; the login never is.
   const name = user.name || user.login;
   if (!name) return null;
-  return { key: `github:${user.id}`, name, login: user.login || null, source: 'github' };
+  // The key stays the numeric id: it survives a rename and an address change.
+  // The email rides alongside so a gate written as git:<email> — from a clone,
+  // or by a Google sign-in — recognises the same person here.
+  return {
+    key: `github:${user.id}`, name, login: user.login || null,
+    email: user.email ? String(user.email).toLowerCase() : null,
+    source: 'github',
+  };
 }
 
 /**

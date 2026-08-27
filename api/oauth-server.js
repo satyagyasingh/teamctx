@@ -4,6 +4,7 @@ import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { providerFromEnv, oauthConfigStatus, GITHUB_SCOPES, OAuthCallbackError } from '../src/oauth/provider.js';
 import { kvGet, kvSet, kvTake, kvDelete, keys, TTL, isPersistent } from '../src/oauth/kv.js';
 import { googleAuthorizeUrl } from '../src/oauth/google.js';
+import { primaryEmail } from '../src/oauth/github-identity.js';
 import { lendDecision } from '../src/oauth/lend-decision.js';
 
 /**
@@ -204,6 +205,7 @@ async function loginViaGithub(code, baseUrl) {
   // cookie and expires with the session.
   return {
     id: String(user.id), login: user.login, name: user.name ?? null,
+    email: user.email ? String(user.email).toLowerCase() : await primaryEmail(body.access_token),
     token: body.access_token,
   };
 }

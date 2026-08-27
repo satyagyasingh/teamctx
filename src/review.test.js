@@ -167,3 +167,44 @@ describe('a manager who has more than one identity', () => {
     expect(canApprove(config, { actor: FROM_GITHUB, displayName: 'Someone Else' })).toBe(false);
   });
 });
+
+describe('one person recognised across every surface', () => {
+  // Each surface names the same person differently. A gate written on one of
+  // them must not be a lockout on the others.
+  const EMAIL = 'ada@example.com';
+  const FROM_CLONE = { key: `git:${EMAIL}`, name: 'Ada', login: null, source: 'git' };
+  const FROM_GITHUB = { key: 'github:1001', name: 'Ada', login: 'ada', email: EMAIL, source: 'github' };
+  const FROM_GOOGLE = { key: `git:${EMAIL}`, name: 'Ada', login: null, email: EMAIL, source: 'google' };
+
+  const gate = { managerKey: `git:${EMAIL}` };
+
+  it('recognises the clone the gate was written from', () => {
+    expect(canApprove(gate, { actor: FROM_CLONE })).toBe(true);
+  });
+
+  it('recognises the same person over hosted GitHub', () => {
+    // This is what needed the user:email scope: without the address, a GitHub
+    // session is only github:<id> and matches nothing written elsewhere.
+    expect(canApprove(gate, { actor: FROM_GITHUB })).toBe(true);
+  });
+
+  it('recognises the same person signing in with Google', () => {
+    expect(canApprove(gate, { actor: FROM_GOOGLE })).toBe(true);
+  });
+
+  it('refuses a different GitHub account with a different address', () => {
+    const other = { key: 'github:2002', name: 'Ada', login: 'imposter', email: 'other@example.com', source: 'github' };
+    expect(canApprove(gate, { actor: other })).toBe(false);
+  });
+
+  it('refuses a GitHub account whose address the token would not reveal', () => {
+    // A token minted before user:email carries no address, so it falls back to
+    // the id — which this gate does not name. Refusing is the right answer.
+    const noEmail = { key: 'github:1001', name: 'Ada', login: 'ada', email: null, source: 'github' };
+    expect(canApprove(gate, { actor: noEmail })).toBe(false);
+  });
+
+  it('still matches an id-based gate by id', () => {
+    expect(canApprove({ managerKey: 'github:1001' }, { actor: FROM_GITHUB })).toBe(true);
+  });
+});

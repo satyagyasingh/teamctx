@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **One person is now recognised on every surface they connect from.** An actor
+  key depended on how you arrived — `git:<email>` from a clone, `github:<id>`
+  from the hosted server — so a manager gate pinned from a laptop refused the
+  same person in a chat client, and would have refused them again signing in
+  with Google. An email address is the one identity all three can agree on, so
+  teamctx now asks GitHub for `user:email`, reads the account's *verified*
+  primary address (an unverified one would let somebody claim a gate pinned to
+  an address they do not own), and matches a `git:<email>` gate against it.
+  A Google sign-in resolves into that same namespace, and the manager no longer
+  needs a roster entry to use it — they were being turned away from their own
+  project for signing in the way they tell everyone else to.
+  **Existing hosted sessions must authorise once more** to pick up the new
+  scope; until then they are matched by numeric id, which still works.
+  `teamctx config manager --add <ref>` adds an identity other than the one in
+  use, for a gate that predates this.
 - **The manager could be locked out of their own project.** An actor key
   depends on how you connected — a clone resolves you from `git config` as
   `git:<email>`, the hosted server resolves you from GitHub OAuth as

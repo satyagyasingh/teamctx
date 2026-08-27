@@ -22,6 +22,18 @@ secret — the secret is shown once.
 > Use an **OAuth App**, not a GitHub App. OAuth Apps issue the user-scoped
 > `repo` token the MCP tools need, with no per-repo installation step.
 
+teamctx asks for `repo read:user user:email`. There is nothing to configure —
+an OAuth App grants whatever the flow requests — but `user:email` is worth
+knowing about: it is what lets teamctx recognise you by the same email address
+your clone and a Google sign-in use. Without it a GitHub session is only a
+numeric id, and a manager gate pinned from a laptop would not recognise the
+same person in a chat client.
+
+> **If you deployed before this**, everyone signing in through the hosted
+> connector needs to authorise once more, since a token already issued does not
+> gain a scope. Until they do they are recognised by their numeric id, which
+> still works — it is only the cross-surface matching that waits.
+
 ## 2. Create the Redis store
 
 Use **Upstash directly** — <https://upstash.com>, sign in with GitHub →

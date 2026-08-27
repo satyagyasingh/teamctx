@@ -35,7 +35,14 @@ export function matchesActor(ref, actor) {
     return !!login && r.slice(1) === login;
   }
   if (r.includes(':')) {
-    return r === String(actor.key || '').toLowerCase();
+    if (r === String(actor.key || '').toLowerCase()) return true;
+    // An email is the one identity every surface can agree on, and each names
+    // the same person differently: a clone keys them by email, the hosted
+    // server by GitHub id, a Google sign-in by the address Google verified.
+    // Matching the address as well means a gate pinned from one surface is not
+    // a lockout on the others.
+    const email = String(actor.email || '').toLowerCase();
+    return !!email && r === `git:${email}`;
   }
   return false;
 }

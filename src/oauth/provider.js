@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import { InvalidGrantError, InvalidTokenError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { kvGet, kvSet, kvTake, kvDelete, keys, TTL } from './kv.js';
 import { googleUserFromCode, googleAuthorizeUrl } from './google.js';
+import { primaryEmail } from './github-identity.js';
 
 /**
  * teamctx's OAuth 2.1 authorization server.
@@ -26,7 +27,9 @@ const GITHUB_TOKEN = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER = 'https://api.github.com/user';
 
 /** Scopes we request from GitHub. `repo` covers private teamctx repos. */
-export const GITHUB_SCOPES = 'repo read:user';
+// `user:email` so a GitHub session can be recognised by the same email a clone
+// and a Google sign-in use. Without it one person is two identities.
+export const GITHUB_SCOPES = 'repo read:user user:email';
 
 function newToken(bytes = 32) {
   return randomBytes(bytes).toString('base64url');
@@ -222,7 +225,10 @@ export class TeamctxOAuthProvider {
         `Could not read GitHub profile (${res.status})`);
     }
     const user = await res.json();
-    return { id: String(user.id), login: user.login, name: user.name ?? null };
+    return {
+      id: String(user.id), login: user.login, name: user.name ?? null,
+      email: user.email ? String(user.email).toLowerCase() : await primaryEmail(githubToken),
+    };
   }
 
   // ---- Step 3: Claude exchanges the code at /token ----

@@ -4,6 +4,7 @@ import { runWithActor, actorFromGithubUser } from '../../../src/actor.js';
 import { providerFromEnv } from '../../../src/oauth/provider.js';
 import { kvGet, keys } from '../../../src/oauth/kv.js';
 import { resolveGoogleMember } from '../../../src/oauth/member-access.js';
+import { primaryEmail } from '../../../src/oauth/github-identity.js';
 
 /**
  * Hosted MCP endpoint.  POST /api/mcp/<owner>/<repo>
@@ -151,7 +152,10 @@ async function githubUserFromToken(ghToken) {
     });
     if (!r.ok) return null;
     const u = await r.json();
-    return { id: String(u.id), login: u.login, name: u.name ?? null };
+    return {
+      id: String(u.id), login: u.login, name: u.name ?? null,
+      email: u.email ? String(u.email).toLowerCase() : await primaryEmail(ghToken),
+    };
   } catch {
     return null;   // fall through to config.me
   }
