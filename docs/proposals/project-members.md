@@ -145,7 +145,7 @@ Three things stand between an email address and a contribution. Two are done.
 | | Status |
 | --- | --- |
 | Attribution — whose name the commit carries | done (phase 1) |
-| An AI key they can use | done — a project-shared key |
+| An AI key they can use | done — the project-shared key (#48), which this branch now builds on |
 | Identity — proving they are that email | **this phase** |
 
 ### Identity: sign in with Google
