@@ -529,11 +529,8 @@ const settingsPage = ({ user, hasKey, saved, error, shared = [], lent = [] }) =>
 </p>
 ${saved ? '<div class="ok">Saved.</div>' : ''}
 ${error ? `<div class="bad">${esc(error)}</div>` : ''}
-<p class="muted">Your AI provider key is used only for the teamctx tools that call a
-model — <code>ask</code>, <code>contribute</code>, <code>reflect</code>,
-<code>role_add</code> and the two <code>suggest_*</code> tools. The other 21
-tools work without it. Stored against your GitHub account; never written to
-your repo.</p>
+<p class="muted">Used only by the tools that call a model. Stored against your
+GitHub account, never written to your repo.</p>
 <form method="POST" action="/settings">
   <label for="provider">Provider</label>
   <select id="provider" name="provider">
@@ -549,12 +546,8 @@ your repo.</p>
 <hr style="margin:2.5rem 0;border:0;border-top:1px solid #8883">
 
 <h1>Share a key with a project</h1>
-<p class="muted">Most people on a project never set a key up — plenty of them
-never sign in here at all and reach the project only through their agent. A key
-shared with a project is used for anyone on it who has no key of their own, so
-the model-backed tools work for the whole team. Someone who <em>has</em> saved
-their own key above keeps using it; this never overrides it. You are paying for
-what the project spends.</p>
+<p class="muted">Used by anyone on the project who has no key of their own. Never
+overrides someone's own key. You pay for what the project spends.</p>
 ${shared.length ? `<p class="muted">Sharing a key with:</p>${shared.map(slug => `
 <form method="POST" action="/settings/unshare" style="margin:.35rem 0">
   <input type="hidden" name="project" value="${esc(slug)}">
@@ -578,12 +571,9 @@ ${shared.length ? `<p class="muted">Sharing a key with:</p>${shared.map(slug => 
 <hr style="margin:2.5rem 0;border:0;border-top:1px solid #8883">
 
 <h1>Let members without a GitHub account join</h1>
-<p class="muted">Most people on a project never have a GitHub account — GitHub is
-where the project is stored, not who they are. Lend the project your GitHub
-access and anyone on its roster can sign in with Google instead, using the email
-you invited. Their work is committed under their own name and still goes to you
-for review. Only people already on the roster can use it, and only on this one
-repository.</p>
+<p class="muted">Lets people on the roster sign in with Google instead of GitHub,
+using the email you invited. Their work is committed under their own name and
+still comes to you for review. Roster only, this repository only.</p>
 ${lent.length ? `<p class="muted">Lending access to:</p>${lent.map(slug => `
 <form method="POST" action="/settings/unlend" style="margin:.35rem 0">
   <input type="hidden" name="project" value="${esc(slug)}">
