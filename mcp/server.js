@@ -12,6 +12,7 @@ import {
   readContributions,
 } from '../src/storage.js';
 import { answerQuestion } from '../src/context.js';
+import { commitContext } from '../src/git.js';
 import { migrateIfNeeded } from '../src/migrate.js';
 import { computeStats } from '../src/metrics.js';
 import { initProject } from '../cli/commands/init.core.js';
@@ -915,6 +916,16 @@ export function makeHandlers(projectRoot) {
 
     async config_set({ key, value }) {
       const r = await setConfig({ key, value, teamctxDir: dir(), projectDir: gitCwd });
+      // Every other mutating tool commits; this one did not. Hosted writes land
+      // in the session's in-memory copy of the repo, so without a commit the
+      // request ended and the change was gone — while the tool still reported
+      // success, which is the worst way for a write to fail.
+      let committed = false;
+      if (r.wroteRepo) {
+        await commitContext(`config: ${r.key} by ${await who(dir(), readConfig(dir()))} (via mcp)`,
+          gitCwd ? { cwd: gitCwd } : undefined);
+        committed = true;
+      }
       const notes = r.notes.length ? ` Notes: ${r.notes.join(' | ')}` : '';
       // Clearing is not setting. A client that surfaces only reportBack would
       // otherwise tell the user their name was set to the very value they just
@@ -922,7 +933,7 @@ export function makeHandlers(projectRoot) {
       const what = r.cleared
         ? `config.${r.key} override cleared — it is derived again, currently ${JSON.stringify(r.value)}.`
         : `config.${r.key} set to ${JSON.stringify(r.value)}.`;
-      return textResult({ ...r, reportBack: `Tell the user: ${what}${notes}` });
+      return textResult({ ...r, committed, reportBack: `Tell the user: ${what}${notes}` });
     },
   };
 }

@@ -103,7 +103,7 @@ export async function configManagerCommand(value, opts = {}) {
   const config = readConfig();
   const actor = await resolveActor({ config });
 
-  if (value === undefined && !opts.me && !opts.addMe && !opts.clear) {
+  if (value === undefined && !opts.me && !opts.addMe && !opts.add && !opts.clear) {
     const keys = managerKeys(config);
     const gate = keys.length
       ? `${keys.join(', ')} (identity — secure)`
@@ -127,7 +127,11 @@ export async function configManagerCommand(value, opts = {}) {
     return;
   }
 
-  const requested = opts.clear ? '' : (opts.addMe ? '--add-me' : (opts.me ? '--me' : value));
+  const requested = opts.clear ? ''
+    : opts.add ? `--add ${opts.add}`
+    : opts.addMe ? '--add-me'
+    : opts.me ? '--me'
+    : value;
   const r = await setConfig({ key: 'manager', value: requested });
   console.log(`✓ ${r.notes.join(' ')}`);
 }

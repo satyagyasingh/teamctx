@@ -59,12 +59,12 @@ export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
       await writePrefs(actor, { name: null }, teamctxDir);
       const restored = await resolveIdentity({ actor, config, teamctxDir });
       return {
-        key, value: restored.name, cleared: true,
+        key, value: restored.name, cleared: true, wroteRepo: false,
         notes: [`override cleared — your name is derived again (from: ${restored.source}).`],
       };
     }
     await writePrefs(actor, { name: v }, teamctxDir);
-    return { key, value: v, cleared: false, notes: ['personal setting — stored against you, not written to the repo.'] };
+    return { key, value: v, cleared: false, wroteRepo: false, notes: ['personal setting — stored against you, not written to the repo.'] };
   }
   if (!WRITABLE.has(key)) throw new UnknownConfigKeyError(key);
   const config = readConfig(teamctxDir);
@@ -101,20 +101,31 @@ export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
       next.managerKey = '';
       next.managerKeys = [];
       notes.push('manager gate cleared — anyone may approve or reject.');
-    } else if (raw === '--add-me' || raw === 'add-me') {
+    } else if (raw.startsWith('--add')) {
       // The same person is a different key depending on how they connected: a
       // clone knows them as git:<email>, the hosted server as github:<id>.
       // Without this, setting the gate from a laptop locks you out of your own
       // project from a chat client — which is where the work now happens.
+      //
+      // `--add <ref>` rather than only `--add-me`, because the identity you
+      // need to add is usually the one you are *not* currently using: adding it
+      // from the surface it belongs to would require already being recognised
+      // there, which is the lockout itself. Authorising the add on the surface
+      // where you are recognised is what breaks that circle.
+      const explicit = raw === '--add-me' || raw === 'add-me' ? '' : raw.replace(/^--add[= ]?/, '').trim();
+      const ref = explicit || actor.key;
+      if (explicit && !(explicit.includes(':') || explicit.startsWith('@'))) {
+        throw new Error(`"${explicit}" is not an identity — use github:<id>, git:<email> or @login.`);
+      }
       const existing = managerKeys(next);
       if (existing.length === 0) {
-        next.managerKey = actor.key;
-        notes.push(`gate pinned to ${actor.key}.`);
-      } else if (existing.includes(actor.key)) {
-        notes.push(`${actor.key} is already on the gate — nothing to do.`);
+        next.managerKey = ref;
+        notes.push(`gate pinned to ${ref}.`);
+      } else if (existing.includes(ref)) {
+        notes.push(`${ref} is already on the gate — nothing to do.`);
       } else {
-        next.managerKeys = [...existing.slice(1), actor.key];
-        notes.push(`${actor.key} added to the gate, which now recognises ${existing.length + 1} identities for the manager.`);
+        next.managerKeys = [...existing.slice(1), ref];
+        notes.push(`${ref} added to the gate, which now recognises ${existing.length + 1} identities for the manager.`);
       }
       next.manager = '';
     } else if (raw === '--me' || raw === 'me' || key === 'managerKey') {
@@ -143,7 +154,7 @@ export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
   }
 
   writeConfig(next, teamctxDir);
-  return { key, value: next[key], notes };
+  return { key, value: next[key], wroteRepo: true, notes };
 }
 
 export { PROVIDER_KEYS };

@@ -101,3 +101,45 @@ describe('a member who signed in with Google', () => {
       .rejects.toThrow(/can no longer read/);
   });
 });
+
+describe('the manager signing in with Google', () => {
+  // The manager is not on their own roster and has no reason to be. Without
+  // this they are turned away from their own project for signing in the way
+  // they tell everyone else to.
+  const MANAGED = { ...CONFIG, managerKey: 'git:ada@example.com' };
+
+  it('is let in on the identity the gate already holds', async () => {
+    // An email is the one identity every surface agrees on: a clone reads it
+    // from git config, Google hands it over verified. So the gate pinned from
+    // a laptop recognises the same person arriving through Google.
+    await lend();
+    mockConfigFetch(MANAGED);
+    const r = await resolveGoogleMember({ googleUser: google('ada@example.com', 'Ada'), owner: OWNER, repo: REPO });
+    expect(r.isManager).toBe(true);
+    expect(r.actor.key).toBe('git:ada@example.com');
+  });
+
+  it('does not need a roster entry to get in', async () => {
+    await lend();
+    mockConfigFetch(MANAGED);
+    const r = await resolveGoogleMember({ googleUser: google('ada@example.com'), owner: OWNER, repo: REPO });
+    expect(r.member).toBe(null);
+  });
+
+  it('still refuses a Google account that is neither manager nor member', async () => {
+    await lend();
+    mockConfigFetch(MANAGED);
+    await expect(resolveGoogleMember({ googleUser: google('stranger@example.com'), owner: OWNER, repo: REPO }))
+      .rejects.toThrow(MemberAccessError);
+  });
+
+  it('resolves an ordinary member to the same email namespace', async () => {
+    // Mia is on the roster as git:mia@example.com, so contributing from a
+    // clone and through an assistant come out as one author.
+    await lend();
+    mockConfigFetch(MANAGED);
+    const r = await resolveGoogleMember({ googleUser: google('mia@example.com'), owner: OWNER, repo: REPO });
+    expect(r.isManager).toBeUndefined();
+    expect(r.actor.key).toBe('git:mia@example.com');
+  });
+});

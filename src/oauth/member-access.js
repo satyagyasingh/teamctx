@@ -1,6 +1,7 @@
 import { kvGet, keys } from './kv.js';
 import { memberByEmail } from '../../cli/commands/member.core.js';
 import { actorFromMember } from '../actor.js';
+import { managerKeys, matchesActor } from '../review.js';
 
 /**
  * Let someone with no GitHub account act on a project.
@@ -55,6 +56,27 @@ export async function resolveGoogleMember({ googleUser, owner, repo, ref }) {
   }
 
   const config = await readConfigJson({ owner, repo, token: cred.token, ref });
+
+  // An email address is the one identity every surface can agree on: a clone
+  // reads it from `git config`, and Google hands it over verified. So a Google
+  // sign-in resolves into the same `git:<email>` namespace a clone uses, which
+  // is what lets one person be recognised whichever way they arrive.
+  const asGit = {
+    key: `git:${googleUser.email}`,
+    name: googleUser.name,
+    login: null,
+    email: googleUser.email,
+    source: 'google',
+  };
+
+  // The manager is not on their own roster, and has no reason to be. Without
+  // this they would be turned away from their own project for signing in the
+  // way they tell everyone else to.
+  const gate = managerKeys(config);
+  if (gate.some(k => matchesActor(k, asGit))) {
+    return { ghToken: cred.token, actor: asGit, member: null, isManager: true };
+  }
+
   const member = memberByEmail(config.members, googleUser.email);
   if (!member) {
     // Naming the address is deliberate: signing in with the wrong Google
