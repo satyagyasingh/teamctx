@@ -2,48 +2,53 @@ import { describe, it, expect } from 'vitest';
 import { lendDecision } from './lend-decision.js';
 
 const SLUG = 'acme/ledger';
-const managed = (id) => ({ managerKey: `github:${id}` });
+const GH = { key: 'github:1001', name: 'Ada', login: 'ada', source: 'github' };
 
 describe('who may lend a project GitHub access', () => {
-  it('lets the project manager lend it', () => {
-    // The ordinary case: you ran init, so you are the manager, so this passes
-    // rather than being a second permission to go and arrange.
-    expect(lendDecision({ config: managed('1001'), userId: '1001', slug: SLUG }).ok).toBe(true);
+  it('lets a repository admin lend it', () => {
+    // Lending hands out your own credential, and an admin can already grant
+    // access by other means. This is the same authority, spelled differently.
+    expect(lendDecision({ config: {}, actor: GH, isAdmin: true, slug: SLUG }))
+      .toMatchObject({ ok: true, via: 'admin' });
   });
 
-  it('lets the manager lend even without repository admin', () => {
-    // A manager on a repo they do not administer is still the person teamctx
-    // means; admin was only ever a proxy for this question.
-    const r = lendDecision({ config: managed('1001'), userId: '1001', isAdmin: false, slug: SLUG });
-    expect(r).toMatchObject({ ok: true, via: 'manager' });
+  it('lets the manager lend without repository admin', () => {
+    const config = { managerKey: 'github:1001' };
+    expect(lendDecision({ config, actor: GH, isAdmin: false, slug: SLUG }))
+      .toMatchObject({ ok: true, via: 'manager' });
   });
 
-  it('refuses someone who is not the manager, even with admin', () => {
-    // Repository admin does not make you this project's manager, and lending
-    // hands a credential to everyone the roster names.
-    const r = lendDecision({ config: managed('1001'), userId: '2002', isAdmin: true, slug: SLUG });
+  it('recognises the manager by an identity from a different surface', () => {
+    // The bug this exists for: the gate was pinned from a clone, so it holds
+    // git:<email>, but the settings page knows the same person as github:<id>.
+    // A single-form comparison refused them their own project.
+    const config = { managerKey: 'git:ada@example.com', managerKeys: ['github:1001'] };
+    expect(lendDecision({ config, actor: GH, isAdmin: false, slug: SLUG }).ok).toBe(true);
+  });
+
+  it('recognises the manager by GitHub login', () => {
+    expect(lendDecision({ config: { managerKey: '@ada' }, actor: GH, isAdmin: false, slug: SLUG }).ok).toBe(true);
+  });
+
+  it('refuses a non-manager with no admin', () => {
+    const config = { managerKey: 'github:9999' };
+    const r = lendDecision({ config, actor: GH, isAdmin: false, slug: SLUG });
     expect(r.ok).toBe(false);
     expect(r.why).toMatch(/managed by someone else/);
   });
 
-  it('falls back to repository admin when no manager is recorded', () => {
-    const r = lendDecision({ config: {}, userId: '1001', isAdmin: true, slug: SLUG });
-    expect(r).toMatchObject({ ok: true, via: 'admin' });
+  it('refuses when no manager is recorded and there is no admin', () => {
+    expect(lendDecision({ config: {}, actor: GH, isAdmin: false, slug: SLUG }).ok).toBe(false);
   });
 
-  it('refuses a non-admin when no manager is recorded', () => {
-    expect(lendDecision({ config: {}, userId: '1001', isAdmin: false, slug: SLUG }).ok).toBe(false);
+  it('does not treat an unreadable config as an open gate', () => {
+    expect(lendDecision({ config: null, actor: GH, isAdmin: false, slug: SLUG }).ok).toBe(false);
   });
 
-  it('refuses when the config could not be read at all', () => {
-    // An unreadable config must not be treated as "no manager, go ahead".
-    expect(lendDecision({ config: null, userId: '1001', isAdmin: false, slug: SLUG }).ok).toBe(false);
-  });
-
-  it('never blames permissions when the manager is simply someone else', () => {
-    // The bug this replaces: every failure said "you need admin access",
-    // including to the person who had it.
-    const r = lendDecision({ config: managed('9999'), userId: '1001', isAdmin: true, slug: SLUG });
-    expect(r.why).not.toMatch(/need admin access/);
+  it('never blames admin access when the manager is simply someone else', () => {
+    // The original wording told the repository's own owner they needed a
+    // permission they already had.
+    const r = lendDecision({ config: { managerKey: 'github:9999' }, actor: GH, isAdmin: false, slug: SLUG });
+    expect(r.why).not.toMatch(/^You need admin access/);
   });
 });

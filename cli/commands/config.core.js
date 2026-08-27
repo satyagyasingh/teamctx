@@ -1,6 +1,7 @@
 import { readConfig, writeConfig } from '../../src/storage.js';
 import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
 import { resolveActor } from '../../src/actor.js';
+import { managerKeys } from '../../src/review.js';
 import { writePrefs, resolveDisplayName, resolveIdentity, resolveActiveWorkstream } from '../../src/prefs.js';
 
 const ALIASES = {
@@ -15,7 +16,7 @@ const PROVIDER_KEYS = {
   gemini: 'GEMINI_API_KEY',
 };
 
-const WRITABLE = new Set(['provider', 'model', 'githubRawBase', 'manager', 'managerKey', 'managerEmail', 'deployUrl', 'autoPush']);
+const WRITABLE = new Set(['provider', 'model', 'githubRawBase', 'manager', 'managerKey', 'managerKeys', 'managerEmail', 'deployUrl', 'autoPush']);
 
 /**
  * Keys that describe the person rather than the project. They are stored
@@ -39,7 +40,7 @@ export async function getConfig({ teamctxDir, projectDir } = {}) {
     activeWorkstream: await resolveActiveWorkstream({ actor, config: c, teamctxDir }),
     projectDefaults: { me: c.me, activeWorkstream: c.activeWorkstream || 'main' },
     project: c.project, provider: c.provider || 'anthropic', model: c.model,
-    manager: c.manager || null, managerKey: c.managerKey || null, managerEmail: c.managerEmail || '',
+    manager: c.manager || null, managerKey: c.managerKey || null, managerKeys: managerKeys(c), managerEmail: c.managerEmail || '',
     deployUrl: c.deployUrl || '', githubRawBase: c.githubRawBase || '',
     autoPush: !!c.autoPush,
     workstreams: c.workstreams || [], roles: c.roles || [],
@@ -98,7 +99,24 @@ export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
     if (!raw) {
       next.manager = '';
       next.managerKey = '';
+      next.managerKeys = [];
       notes.push('manager gate cleared — anyone may approve or reject.');
+    } else if (raw === '--add-me' || raw === 'add-me') {
+      // The same person is a different key depending on how they connected: a
+      // clone knows them as git:<email>, the hosted server as github:<id>.
+      // Without this, setting the gate from a laptop locks you out of your own
+      // project from a chat client — which is where the work now happens.
+      const existing = managerKeys(next);
+      if (existing.length === 0) {
+        next.managerKey = actor.key;
+        notes.push(`gate pinned to ${actor.key}.`);
+      } else if (existing.includes(actor.key)) {
+        notes.push(`${actor.key} is already on the gate — nothing to do.`);
+      } else {
+        next.managerKeys = [...existing.slice(1), actor.key];
+        notes.push(`${actor.key} added to the gate, which now recognises ${existing.length + 1} identities for the manager.`);
+      }
+      next.manager = '';
     } else if (raw === '--me' || raw === 'me' || key === 'managerKey') {
       // Pin the gate to a stable identity. `--me` means whoever is running this.
       const ref = (raw === '--me' || raw === 'me') ? actor.key : raw;

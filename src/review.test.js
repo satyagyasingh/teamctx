@@ -131,3 +131,39 @@ describe('isLegacyManagerRef', () => {
     expect(isLegacyManagerRef({})).toBe(false);
   });
 });
+
+describe('a manager who has more than one identity', () => {
+  // One person is a different key depending on how they connected: a clone
+  // resolves them from git config, the hosted server from GitHub OAuth. Pinning
+  // the gate from a laptop and then reaching the project from a chat client is
+  // the ordinary case, and it used to be a lockout.
+  const FROM_GIT = { key: 'git:ada@example.com', name: 'Ada', login: null, source: 'git' };
+  const FROM_GITHUB = { key: 'github:1001', name: 'Ada', login: 'ada', source: 'github' };
+
+  it('recognises them on the surface the gate was pinned from', () => {
+    const config = { managerKey: 'git:ada@example.com' };
+    expect(canApprove(config, { actor: FROM_GIT })).toBe(true);
+  });
+
+  it('recognises them on a surface added later', () => {
+    const config = { managerKey: 'git:ada@example.com', managerKeys: ['github:1001'] };
+    expect(canApprove(config, { actor: FROM_GITHUB })).toBe(true);
+    expect(canApprove(config, { actor: FROM_GIT })).toBe(true);
+  });
+
+  it('still refuses everyone else', () => {
+    const config = { managerKey: 'git:ada@example.com', managerKeys: ['github:1001'] };
+    const other = { key: 'github:2002', name: 'Ada', login: 'imposter', source: 'github' };
+    expect(canApprove(config, { actor: other })).toBe(false);
+  });
+
+  it('reads managerKeys on its own, without a singular key present', () => {
+    expect(canApprove({ managerKeys: ['github:1001'] }, { actor: FROM_GITHUB })).toBe(true);
+  });
+
+  it('is still a closed gate when the list is empty but a name is set', () => {
+    // An empty list must not read as "no gate configured".
+    const config = { managerKeys: [], manager: 'Ada' };
+    expect(canApprove(config, { actor: FROM_GITHUB, displayName: 'Someone Else' })).toBe(false);
+  });
+});

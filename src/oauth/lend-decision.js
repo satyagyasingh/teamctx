@@ -1,33 +1,36 @@
+import { managerKeys } from '../review.js';
+import { matchesActor } from '../review.js';
+
 /**
  * May this GitHub user lend a project's GitHub access?
  *
- * Separated from the HTTP calls that gather the inputs because it is an
- * authorization decision, and this one has already been wrong once: a failed
- * lookup fell through to "you need admin access", which told the repository's
- * own owner a thing that was neither true nor actionable.
+ * Two ways to qualify, and either is enough.
  *
- * The manager gate comes first because it is the question teamctx actually
- * means. Whoever ran `init` is the manager, so for the ordinary case — you set
- * the project up, you own the repo — this passes rather than becoming a second
- * permission to go and arrange. Repository admin is only the fallback for a
- * project with no manager pinned yet: lending hands a credential to everyone
- * the roster names, and with nobody recorded, whoever can administer the
- * repository is the one entitled to decide.
+ * **Repository admin.** Lending means handing out *your own* credential, so the
+ * decision is about your account before it is about the project. Whoever can
+ * administer the repository can already grant access to it by other means; this
+ * is not a new authority, it is the same one spelled differently.
+ *
+ * **The project's manager**, matched against every identity the gate knows.
+ * One person is a different key depending on how they connected — `git:<email>`
+ * from a clone, `github:<id>` from the hosted server — so comparing a single
+ * form refused people their own project. That is exactly how this went wrong
+ * the first time.
  */
-export function lendDecision({ config, userId, isAdmin = false, slug = 'this project' } = {}) {
-  const managerKey = config?.managerKey;
+export function lendDecision({ config, actor, isAdmin = false, slug = 'this project' } = {}) {
+  if (isAdmin) return { ok: true, via: 'admin' };
 
-  if (managerKey) {
-    if (managerKey === `github:${userId}`) return { ok: true, via: 'manager' };
+  const keys = managerKeys(config);
+  if (keys.length === 0) {
     return {
       ok: false,
-      why: `${slug} is managed by someone else, so only they can lend its GitHub access.`,
+      why: `${slug} has no manager recorded, so lending needs admin access on the repository.`,
     };
   }
+  if (keys.some(k => matchesActor(k, actor))) return { ok: true, via: 'manager' };
 
-  if (isAdmin) return { ok: true, via: 'admin' };
   return {
     ok: false,
-    why: `${slug} has no manager recorded, so lending needs admin access on the repository.`,
+    why: `${slug} is managed by someone else, and you do not have admin access on the repository.`,
   };
 }

@@ -1,6 +1,7 @@
 import { readConfig, writeConfig } from '../../src/storage.js';
 import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
 import { resolveActor } from '../../src/actor.js';
+import { managerKeys } from '../../src/review.js';
 import { setConfig } from './config.core.js';
 import { writePrefs, resolveDisplayName, resolveIdentity } from '../../src/prefs.js';
 
@@ -102,23 +103,31 @@ export async function configManagerCommand(value, opts = {}) {
   const config = readConfig();
   const actor = await resolveActor({ config });
 
-  if (value === undefined && !opts.me && !opts.clear) {
-    const gate = config.managerKey
-      ? `${config.managerKey} (identity — secure)`
+  if (value === undefined && !opts.me && !opts.addMe && !opts.clear) {
+    const keys = managerKeys(config);
+    const gate = keys.length
+      ? `${keys.join(', ')} (identity — secure)`
       : (config.manager ? `${config.manager} (display name — advisory only)` : '(not set — anyone can approve/reject)');
     console.log(`\nCurrent manager gate: ${gate}`);
-    console.log(`Your identity: ${actor.key}`);
+    console.log(`Your identity here:   ${actor.key}`);
+    if (keys.length && !keys.includes(actor.key)) {
+      // The same person is a different key on a clone and in a chat client, so
+      // this is the ordinary state rather than a sign something is wrong.
+      console.log('\nThe gate does not recognise the identity you are using now.');
+      console.log('If that is still you: teamctx config manager --add-me');
+    }
     console.log('\nUsage: teamctx config manager --me        # pin the gate to you');
+    console.log('       teamctx config manager --add-me    # also recognise this identity');
     console.log('       teamctx config manager @githublogin');
     console.log('       teamctx config manager --clear');
-    if (config.manager && !config.managerKey) {
+    if (config.manager && keys.length === 0) {
       console.log('\nWarning: a display name is not a secure gate — anyone can set that');
       console.log('name as their own with `teamctx config name`. Re-pin it with --me.');
     }
     return;
   }
 
-  const requested = opts.clear ? '' : (opts.me ? '--me' : value);
+  const requested = opts.clear ? '' : (opts.addMe ? '--add-me' : (opts.me ? '--me' : value));
   const r = await setConfig({ key: 'manager', value: requested });
   console.log(`✓ ${r.notes.join(' ')}`);
 }

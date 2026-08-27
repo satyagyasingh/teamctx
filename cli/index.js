@@ -171,6 +171,7 @@ config.command('model [value]').description('Get or set the AI model').action(co
 config.command('github-raw-base [value]').description('Get or set the GitHub raw base URL').action(configGithubRawBaseCommand);
 config.command('manager [value]').description('Get or set who may approve/reject — pin it to an identity, not a display name')
   .option('--me', 'Pin the gate to your own identity')
+  .option('--add-me', 'Also recognise the identity you are using now (a clone and a chat client see you differently)')
   .option('--clear', 'Remove the gate (anyone may approve/reject)')
   .action(configManagerCommand);
 config.command('manager-email [value]').description('Get or set the manager email for contribution notifications').action(configManagerEmailCommand);

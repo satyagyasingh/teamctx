@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **The manager could be locked out of their own project.** An actor key
+  depends on how you connected — a clone resolves you from `git config` as
+  `git:<email>`, the hosted server resolves you from GitHub OAuth as
+  `github:<id>` — and the gate compared one stored key exactly. So pinning the
+  gate from a laptop and then reaching the project from a chat client refused
+  you your own project, which is now the ordinary way to work. The gate reads
+  `managerKeys` as well as `managerKey`, and `teamctx config manager --add-me`
+  adds the identity you are using now. `teamctx config manager` with no
+  arguments says when the gate does not recognise you, instead of leaving it to
+  be discovered at the moment of approving something.
+- **Lending a project GitHub access asked for the wrong thing.** It required
+  repository admin, a permission bit standing in for the question actually
+  being asked, and every failure to answer it — including a session with no
+  token, and a rate limit — reported "you need admin access", told to people who
+  had it. Admin or being the project manager now qualifies, matched against
+  every identity the gate knows, and each failure says what actually happened.
 - **`init` over the hosted MCP server crashed instead of bootstrapping a
   project.** `initProject` was the one write path with no hosted branch: it ran
   `join(projectDir, '.teamctx')` first, and in hosted mode `projectDir` is the

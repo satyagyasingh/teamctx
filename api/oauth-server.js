@@ -425,7 +425,10 @@ async function mayLend(user, ref) {
     } catch { /* unreadable config falls back to the admin check */ }
   }
 
-  return lendDecision({ config, userId: user.id, isAdmin: !!info?.permissions?.admin, slug: `${ref.owner}/${ref.repo}` });
+  // The same shape resolveActor produces, so the manager gate is matched by the
+  // one function that knows every form an identity takes.
+  const actor = { key: `github:${user.id}`, name: user.name || user.login, login: user.login, source: 'github' };
+  return lendDecision({ config, actor, isAdmin: !!info?.permissions?.admin, slug: `${ref.owner}/${ref.repo}` });
 }
 
 app.post('/settings/lend', async (req, res) => {
