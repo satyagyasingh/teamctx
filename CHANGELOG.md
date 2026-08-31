@@ -27,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   history was the only record of where the commit came from — and it did not say.
 
 ### Added
+- **"What are my tasks?"** — `list_tasks` and `teamctx task list` take `mine`
+  / `--mine`. The task loop shipped in #47 worked from the second step onward;
+  the first one needed the caller to already know the exact display name this
+  project has for them, which an assistant can only guess at. Tasks now record
+  an `ownerKey` when raised for the caller, so `mine` matches on identity as
+  well as name: a display name changes with `teamctx config name` and differs
+  between a clone and a chat client, either of which would quietly stop a
+  member's own work being theirs. Existing tasks carry no key and still match by
+  name. `mine` with `owner` is an error rather than an intersection. Part of #46.
 - **Tasks over MCP.** All eight task commands are now tools: `list_tasks`,
   `get_task`, `task_add`, `task_done`, `task_reopen`, `task_assign`, `task_rm`
   and `task_compile`. The server described itself as covering the full CLI and
@@ -170,6 +179,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Retry-After` on 429 and 529. Databases are reported as skipped rather than
   imported. Design notes:
   [docs/proposals/import-notion.md](docs/proposals/import-notion.md). Closes #26.
+- **Coda connector.** `teamctx import --from coda <doc-link|page-link>` — a page
+  becomes one proposed contribution. A pasted Coda URL carries both ids, so a
+  doc link imports every page in the doc and a page link imports that page plus
+  everything nested beneath it, however deep;
+  with no selector it walks the docs your token can see. (The connector honours
+  a `since` window; the `--since` flag that reaches it from the command line
+  lands with the Slack connector, #22.)
+  Coda exports markdown itself, so there is no rendering to get wrong — the
+  connector runs the export job (begin, poll, download) and hands the result
+  straight to the distiller. An export that fails or never finishes fails that
+  one document rather than stalling the run, and pages with no exportable
+  content (embeds, sync pages) are reported with a reason instead of arriving
+  empty.
+  Credentials are your own token from `CODA_TOKEN`, generated under Account
+  settings → API settings. The export download lands on signed storage rather
+  than `coda.io`, and that request deliberately carries no `Authorization`
+  header. Requests are paced per rate-limit bucket, since Coda allows ~100 reads
+  per 6 seconds against ~10 writes and beginning an export is a write. Design
+  notes: [docs/proposals/import-coda.md](docs/proposals/import-coda.md).
+  Closes #27.
+- **Dropbox connector.** `teamctx import --from dropbox <path|file-id|shared-link>`
+  — every document beneath a path becomes one proposed contribution. Markdown
+  and text files are downloaded; Dropbox Paper docs are exported as markdown.
+  Word documents are reported as skipped rather than half-imported: Dropbox has
+  no text conversion, and `files/export` returns `docx` even for a Google Doc
+  kept in Dropbox, so both routes need an OOXML reader that does not exist yet.
+  Spreadsheets, decks, images and other binaries are skipped with a reason.
+  Which files can be fetched, and how, comes from the listing itself —
+  `is_downloadable` and `export_info.export_as` — rather than from a table of
+  types this project would have to keep current.
+  The whole tree arrives in one request (`recursive: true`), so there is no
+  folder walk, and `--since` filters on `server_modified` in memory without
+  costing an extra call. Oversized files are skipped from the listing, before
+  anything is transferred.
+  Shared links work, including listing inside a shared folder that is not in
+  your own Dropbox. A Paper doc reached that way is reported as unexportable
+  while listing rather than failing mid-import.
+  Credentials come from `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` and
+  `DROPBOX_REFRESH_TOKEN` (or a short-lived `DROPBOX_ACCESS_TOKEN` on its own),
+  exchanged lazily on the first request. `teamctx auth dropbox` obtains them:
+  Dropbox's code flow needs no redirect URI, so it shows you a code to paste
+  back and nothing on your machine listens on a port. Setup and troubleshooting:
+  [docs/import-dropbox.md](docs/import-dropbox.md). Design notes:
+  [docs/proposals/import-dropbox.md](docs/proposals/import-dropbox.md).
+  Closes #25.
 - **`teamctx stats`** — honest team numbers computed entirely from the repo's
   own history. No AI call, no network, no telemetry: contribution cadence by
   author and per week, approval flow with median review wait, days since the
