@@ -748,6 +748,8 @@ export function makeHandlers(projectRoot) {
         since: args.since,
         workstream: args.workstream,
       }));
+    },
+
     async get_connect_url() {
       const config = readConfig(dir());
       // Hosted already knows the repository from the request URL; a clone has to
