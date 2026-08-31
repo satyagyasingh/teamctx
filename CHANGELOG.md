@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A team member could make themselves the manager.** `config_set` accepted
+  `manager` and `managerKey`, and nothing checked who was asking — so someone
+  invited with deliberately reduced, roster-gated access could grant themselves
+  approval rights and then sign off their own submissions, which is the whole
+  trust boundary the invite exists to draw. The gate is now pinned at `init` to
+  whoever sets the project up and is not writable afterwards: both keys are off
+  `config_set`'s writable surface and `teamctx config manager` is gone, so there
+  is no reachable path rather than a gated one. `init` pins to the caller's
+  identity rather than the name they type, since a display name is settable by
+  its owner. A project with no manager recorded still accepts the first one,
+  which is how an existing project adopts the gate.
 - **One person is now recognised on every surface they connect from.** An actor
   key depended on how you arrived — `git:<email>` from a clone, `github:<id>`
   from the hosted server — so a manager gate pinned from a laptop refused the
