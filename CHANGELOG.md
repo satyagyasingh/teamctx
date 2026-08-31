@@ -116,6 +116,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attributed to whoever's token made it and a whole team read as a single
   contributor in `git log`. The author is now the acting person, via the
   `<id>+<login>@users.noreply.github.com` form GitHub itself issues.
+- **`get_connect_url`** over MCP, alongside `teamctx connect`. The manager is
+  the one who hands the URL out and increasingly does it from a chat client,
+  where the CLI is not reachable.
+
+### Fixed
+- **`config_set` reported success without persisting.** A hosted write lands in
+  the session's in-memory copy of the repo, and this was the one mutating tool
+  that never committed — so the request ended, the change was gone, and the tool
+  said it had worked. Setting `deployUrl` from an assistant read back empty.
+  Personal settings still do not commit: a display name is stored against the
+  caller, and committing it would rename them for everyone.
 - **`teamctx connect`** prints the URL a team member pastes into their AI
   client. Both halves of it already existed and nothing joined them: the
   deployment origin sits in `config.json`, the owner and repo in the git
