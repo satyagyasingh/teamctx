@@ -13,6 +13,7 @@ import {
 } from '../src/storage.js';
 import { answerQuestion } from '../src/context.js';
 import { commitContext } from '../src/git.js';
+import { connectorUrl, originRemote } from '../cli/commands/connect.core.js';
 import { migrateIfNeeded } from '../src/migrate.js';
 import { computeStats } from '../src/metrics.js';
 import { initProject } from '../cli/commands/init.core.js';
@@ -114,6 +115,11 @@ export const TOOLS = [
   {
     name: 'get_status',
     description: "Return the teamctx project status: project name, provider, model, manager identity, workstreams with why-counts, roles, contribution/decision totals. `me` and `activeWorkstream` are the calling user's, not the project defaults.",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'get_connect_url',
+    description: "The URL a team member pastes into their AI client to reach this project. Read-only. Give it to anyone added to the project — they add it as a custom connector and sign in. Fails with what to run when the project has no deploy URL recorded, which is the usual reason it is missing.",
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -742,6 +748,27 @@ export function makeHandlers(projectRoot) {
         since: args.since,
         workstream: args.workstream,
       }));
+    async get_connect_url() {
+      const config = readConfig(dir());
+      // Hosted already knows the repository from the request URL; a clone has to
+      // read its remote, which stays right through a rename.
+      const where = isHosted
+        ? { owner: projectRoot.owner, repo: projectRoot.repo }
+        : { remote: await originRemote(gitCwd) };
+      try {
+        const r = connectorUrl({ deployUrl: config.deployUrl, ...where });
+        return textResult({
+          ...r,
+          reportBack: `Connector URL for ${config.project || r.repo}: ${r.url} — send it to anyone on the project; they add it as a custom connector and sign in.`,
+        });
+      } catch (err) {
+        return textResult({
+          error: err.message,
+          reportBack: err.code === 'NO_DEPLOY_URL'
+            ? 'Tell the user: this project has no deploy URL recorded, so there is no connector to hand out. Set it with config_set key "deployUrl" if the project is deployed.'
+            : `Tell the user: ${err.message}.`,
+        });
+      }
     },
 
     async get_config() {
@@ -924,6 +951,13 @@ export function makeHandlers(projectRoot) {
       if (r.wroteRepo) {
         await commitContext(`config: ${r.key} by ${await who(dir(), readConfig(dir()))} (via mcp)`,
           gitCwd ? { cwd: gitCwd } : undefined);
+      // Every other mutating tool commits; this one did not. A hosted write
+      // lands in the session's in-memory copy of the repo, so without a commit
+      // the request ended and the change was gone — while the tool still
+      // reported success, which is the worst way for a write to fail.
+      let committed = false;
+      if (r.wroteRepo) {
+        await commitContext(`config: ${r.key} (via mcp)`, gitCwd ? { cwd: gitCwd } : undefined);
         committed = true;
       }
       const notes = r.notes.length ? ` Notes: ${r.notes.join(' | ')}` : '';
