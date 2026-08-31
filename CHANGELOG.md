@@ -127,6 +127,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   said it had worked. Setting `deployUrl` from an assistant read back empty.
   Personal settings still do not commit: a display name is stored against the
   caller, and committing it would rename them for everyone.
+  `reportBack` now says whether the change reached the repo, and `committed`
+  reports the commit that was made rather than the one that was attempted. The
+  tool description tells clients to read `reportBack` out verbatim, so a success
+  string that did not depend on the write was a false success said aloud — which
+  is how the missing commit went unnoticed in the first place.
 - **`teamctx connect`** prints the URL a team member pastes into their AI
   client. Both halves of it already existed and nothing joined them: the
   deployment origin sits in `config.json`, the owner and repo in the git

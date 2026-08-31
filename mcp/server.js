@@ -957,8 +957,8 @@ export function makeHandlers(projectRoot) {
       // reported success, which is the worst way for a write to fail.
       let committed = false;
       if (r.wroteRepo) {
-        await commitContext(`config: ${r.key} (via mcp)`, gitCwd ? { cwd: gitCwd } : undefined);
-        committed = true;
+        const c = await commitContext(`config: ${r.key} (via mcp)`, gitCwd ? { cwd: gitCwd } : undefined);
+        committed = c?.committed === true;
       }
       const notes = r.notes.length ? ` Notes: ${r.notes.join(' | ')}` : '';
       // Clearing is not setting. A client that surfaces only reportBack would
@@ -967,7 +967,13 @@ export function makeHandlers(projectRoot) {
       const what = r.cleared
         ? `config.${r.key} override cleared — it is derived again, currently ${JSON.stringify(r.value)}.`
         : `config.${r.key} set to ${JSON.stringify(r.value)}.`;
-      return textResult({ ...r, committed, reportBack: `Tell the user: ${what}${notes}` });
+      // Whether it persisted belongs in the sentence a client reads out. The
+      // tool description tells callers to report this verbatim, so a success
+      // string that does not depend on the write is a false success said aloud.
+      const landed = r.wroteRepo
+        ? (committed ? ' Committed to the repo.' : ' Nothing was committed — the value was already stored.')
+        : '';
+      return textResult({ ...r, committed, reportBack: `Tell the user: ${what}${landed}${notes}` });
     },
   };
 }

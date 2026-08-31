@@ -20,13 +20,20 @@ export async function commitContext(message, { cwd, author } = {}) {
     // Git Data API. Matches local behavior — one CLI/tool call = one commit.
     await session.commit(message, { author });
     return;
+    const r = await session.commit(message);
+    // Reported rather than assumed: a write of the value already stored leaves
+    // nothing to commit, and a caller told it committed anyway is being handed
+    // a success it can only disprove by reading back.
+    return { committed: r?.committed !== false };
   }
   const opts = cwd ? { cwd } : undefined;
   await execFileAsync('git', ['add', '.teamctx/'], opts);
   try {
     await execFileAsync('git', ['commit', '-m', message], opts);
+    return { committed: true };
   } catch (err) {
-    if (!String(err.stdout || '').includes('nothing to commit')) throw err;
+    if (String(err.stdout || '').includes('nothing to commit')) return { committed: false };
+    throw err;
   }
 }
 

@@ -174,6 +174,25 @@ describe('a config change made over the hosted server', () => {
     expect(r.committed).toBe(true);
   });
 
+  it('says in the sentence a client reads out whether it persisted', async () => {
+    // The tool description tells callers to report `reportBack` verbatim, so a
+    // success string that does not depend on the write is a false success said
+    // out loud — which is how the missing commit went unnoticed.
+    const session = fakeSession();
+    const r = await asUser(session, ALICE, h => json(h.config_set({ key: 'deployUrl', value: 'https://x.vercel.app' })));
+    expect(r.reportBack).toMatch(/Committed to the repo/);
+  });
+
+  it('reports the commit it actually made, not the one it attempted', async () => {
+    // Writing the value already stored leaves nothing to commit. Claiming
+    // otherwise hands back a success only a read-back could disprove.
+    const session = fakeSession();
+    session.commit = async () => ({ committed: false });
+    const r = await asUser(session, ALICE, h => json(h.config_set({ key: 'deployUrl', value: 'https://x.vercel.app' })));
+    expect(r.committed).toBe(false);
+    expect(r.reportBack).toMatch(/Nothing was committed/);
+  });
+
   it('does not commit a personal setting, which never belonged in the repo', async () => {
     // A display name is stored against the caller, not the project. Committing
     // it would rename them for everyone.
