@@ -2,6 +2,7 @@ import { readConfig, writeConfig } from '../../src/storage.js';
 import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
 import { resolveActor } from '../../src/actor.js';
 import { managerKeys } from '../../src/review.js';
+import { assertManager } from './review.core.js';
 import { writePrefs, resolveDisplayName, resolveIdentity, resolveActiveWorkstream } from '../../src/prefs.js';
 
 const ALIASES = {
@@ -16,7 +17,17 @@ const PROVIDER_KEYS = {
   gemini: 'GEMINI_API_KEY',
 };
 
-const WRITABLE = new Set(['provider', 'model', 'githubRawBase', 'manager', 'managerKey', 'managerKeys', 'managerEmail', 'deployUrl', 'autoPush']);
+/**
+ * Keys `config_set` will write.
+ *
+ * `manager` / `managerKey` are deliberately absent. The gate decides who may
+ * approve, so a caller able to write it can grant themselves approval and sign
+ * off their own submissions — which is precisely the trust a member is invited
+ * with less of. It is pinned at `init` to whoever set the project up and is not
+ * reachable afterwards; the branch below still handles it, and is still gated,
+ * so re-exposing it is safe rather than a trap.
+ */
+const WRITABLE = new Set(['provider', 'model', 'githubRawBase', 'managerEmail', 'deployUrl', 'autoPush']);
 
 /**
  * Keys that describe the person rather than the project. They are stored
@@ -93,6 +104,16 @@ export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
     }
     next.model = resolved;
   } else if (key === 'manager' || key === 'managerKey') {
+    // Unreachable while `manager` is off WRITABLE, and gated regardless: the
+    // check belongs with the branch it protects, not with whatever exposes it.
+    // The empty gate is the bootstrap case — a project with no manager yet is
+    // how the first one gets set.
+    if (managerKeys(config).length > 0 || config.manager) {
+      assertManager(config, {
+        actor,
+        displayName: await resolveDisplayName({ actor, config, teamctxDir }),
+      });
+    }
     const raw = value === '' || value === '""' || value === "''" ? '' : String(value).trim();
     const actor = await resolveActor({ config, cwd: projectDir });
 

@@ -18,7 +18,7 @@ import { contextCommand } from './commands/context.js';
 import { statusCommand } from './commands/status.js';
 import { statsCommand } from './commands/stats.js';
 import { DEFAULT_WINDOW_DAYS } from '../src/metrics.js';
-import { configModelCommand, configGithubRawBaseCommand, configManagerCommand, configManagerEmailCommand, configDeployUrlCommand, configProviderCommand, configNameCommand } from './commands/config.js';
+import { configModelCommand, configGithubRawBaseCommand, configManagerEmailCommand, configDeployUrlCommand, configProviderCommand, configNameCommand } from './commands/config.js';
 import { reviewListCommand, reviewApproveCommand, reviewRejectCommand } from './commands/review.js';
 import {
   snapshotCreateCommand, snapshotListCommand, snapshotShowCommand,
@@ -169,12 +169,6 @@ config.command('name [value]').description('Get or set your own display name on 
 config.command('provider [value]').description('Get or set the AI provider (anthropic|openai|gemini)').action(configProviderCommand);
 config.command('model [value]').description('Get or set the AI model').action(configModelCommand);
 config.command('github-raw-base [value]').description('Get or set the GitHub raw base URL').action(configGithubRawBaseCommand);
-config.command('manager [value]').description('Get or set who may approve/reject — pin it to an identity, not a display name')
-  .option('--me', 'Pin the gate to your own identity')
-  .option('--add-me', 'Also recognise the identity you are using now')
-  .option('--add <ref>', 'Also recognise another identity: github:<id>, git:<email> or @login')
-  .option('--clear', 'Remove the gate (anyone may approve/reject)')
-  .action(configManagerCommand);
 config.command('manager-email [value]').description('Get or set the manager email for contribution notifications').action(configManagerEmailCommand);
 config.command('deploy-url [value]').description('Get or set the Vercel deploy URL').action(configDeployUrlCommand);
 
