@@ -1,3 +1,8 @@
+import { promisify } from 'util';
+import { execFile } from 'child_process';
+
+const execFileAsync = promisify(execFile);
+
 /**
  * Where a team member points their AI client to reach this project.
  *
@@ -43,11 +48,14 @@ export function parseGithubRemote(remote) {
  * slash is expected input rather than a mistake — left in it would produce a
  * double slash that some proxies collapse and others 404 on.
  */
-export function connectorUrl({ deployUrl, remote } = {}) {
+export function connectorUrl({ deployUrl, remote, owner, repo } = {}) {
   const origin = String(deployUrl || '').trim().replace(/\/+$/, '');
   if (!origin) throw new NoDeployUrlError();
 
-  const parsed = parseGithubRemote(remote);
+  // The hosted server already knows which repository it is serving — it is in
+  // the request URL — so it says so directly rather than looking for a git
+  // remote it does not have.
+  const parsed = (owner && repo) ? { owner, repo } : parseGithubRemote(remote);
   if (!parsed) throw new NoGithubRemoteError(remote);
 
   return {
@@ -55,4 +63,21 @@ export function connectorUrl({ deployUrl, remote } = {}) {
     owner: parsed.owner,
     repo: parsed.repo,
   };
+}
+
+/**
+ * The repository this project lives in.
+ *
+ * Read from the git remote rather than config: it is the same answer, it stays
+ * correct if the repo is renamed or transferred, and it needs nothing recorded.
+ * Returns null in hosted mode, where there is no clone and the request URL
+ * already says which repository is being served.
+ */
+export async function originRemote(cwd) {
+  try {
+    const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], cwd ? { cwd } : undefined);
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
 }

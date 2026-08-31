@@ -1,22 +1,5 @@
-import { promisify } from 'util';
-import { execFile } from 'child_process';
 import { readConfig } from '../../src/storage.js';
-import { connectorUrl, NoDeployUrlError, NoGithubRemoteError } from './connect.core.js';
-
-const execFileAsync = promisify(execFile);
-
-/**
- * Read from the git remote rather than config: it is the same answer, it stays
- * correct if the repo is renamed or transferred, and it needs nothing recorded.
- */
-async function originRemote() {
-  try {
-    const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin']);
-    return stdout.trim() || null;
-  } catch {
-    return null;
-  }
-}
+import { connectorUrl, originRemote, NoDeployUrlError, NoGithubRemoteError } from './connect.core.js';
 
 export async function connectCommand() {
   const config = readConfig();
