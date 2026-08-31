@@ -116,6 +116,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attributed to whoever's token made it and a whole team read as a single
   contributor in `git log`. The author is now the acting person, via the
   `<id>+<login>@users.noreply.github.com` form GitHub itself issues.
+- **`teamctx connect`** prints the URL a team member pastes into their AI
+  client. Both halves of it already existed and nothing joined them: the
+  deployment origin sits in `config.json`, the owner and repo in the git
+  remote. Assembling them was left to whoever was handing the URL over, from
+  memory — which is how it went the first time an invited member was walked
+  through joining, live on a call. The repo is read from the remote rather than
+  config so it stays right through a rename, and a trailing slash on the deploy
+  URL is tolerated because it is pasted out of a browser as often as typed.
+  New: `docs/mcp-join.md`, the same path written from the joining member's side.
+  Part of #44.
 - **Tasks over MCP.** All eight task commands are now tools: `list_tasks`,
   `get_task`, `task_add`, `task_done`, `task_reopen`, `task_assign`, `task_rm`
   and `task_compile`. The server described itself as covering the full CLI and
