@@ -51,8 +51,8 @@ Same pattern:
 
 ## Using the hosted connector instead
 
-The recipes above predate the hosted MCP server, and are the route that works
-in any chat client at all. If yours supports custom MCP connectors, the whole
+The recipes above are the route that works in any chat client at all, with no
+setup on the project's side. If yours supports custom MCP connectors, the whole
 loop runs in conversation instead — list your tasks, pull a compiled prompt, do
 the work, submit the contribution — with nothing pasted into a terminal.
 
