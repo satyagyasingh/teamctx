@@ -18,12 +18,10 @@ export async function commitContext(message, { cwd, author } = {}) {
   if (session) {
     // Hosted mode: flush all buffered writes as ONE atomic commit via the
     // Git Data API. Matches local behavior — one CLI/tool call = one commit.
-    await session.commit(message, { author });
-    return;
-    const r = await session.commit(message);
     // Reported rather than assumed: a write of the value already stored leaves
-    // nothing to commit, and a caller told it committed anyway is being handed
-    // a success it can only disprove by reading back.
+    // nothing to commit, and a caller told it committed anyway is handed a
+    // success it can only disprove by reading back.
+    const r = await session.commit(message, { author });
     return { committed: r?.committed !== false };
   }
   const opts = cwd ? { cwd } : undefined;

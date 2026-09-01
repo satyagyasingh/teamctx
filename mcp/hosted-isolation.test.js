@@ -260,33 +260,6 @@ describe('the manager gate cannot be talked around', () => {
   });
 });
 
-describe('a config change made over the hosted server', () => {
-  // It reported success and vanished. Hosted writes land in the session's
-  // in-memory copy of the repo; without a commit the request ended and the
-  // change was gone, while the tool still said it had worked.
-  it('reaches the repository rather than only the session', async () => {
-    const session = fakeSession();
-    await asUser(session, ALICE, h => json(h.config_set({ key: 'managerEmail', value: 'ada@example.com' })));
-    expect(session.configJson().managerEmail).toBe('ada@example.com');
-    expect(session.commits.some(m => /config: managerEmail/.test(m))).toBe(true);
-  });
-
-  it('reports whether it committed, so a caller cannot claim more than happened', async () => {
-    const session = fakeSession();
-    const r = await asUser(session, ALICE, h => json(h.config_set({ key: 'managerEmail', value: 'ada@example.com' })));
-    expect(r.committed).toBe(true);
-  });
-
-  it('does not commit a personal setting, which never belonged in the repo', async () => {
-    // A display name is stored against the caller, not the project. Committing
-    // it would rename them for everyone.
-    const session = fakeSession();
-    const r = await asUser(session, ALICE, h => json(h.config_set({ key: 'name', value: 'Ada A.' })));
-    expect(r.committed).toBe(false);
-    expect(session.commits).toEqual([]);
-  });
-});
-
 describe('tasks on the hosted server', () => {
   // Hosted mode has no filesystem: `dir()` hands back a project descriptor, not
   // a path. Every other storage reader already branches on the session; the

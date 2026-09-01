@@ -945,21 +945,17 @@ export function makeHandlers(projectRoot) {
 
     async config_set({ key, value }) {
       const r = await setConfig({ key, value, teamctxDir: dir(), projectDir: gitCwd });
-      // Every other mutating tool commits; this one did not. Hosted writes land
-      // in the session's in-memory copy of the repo, so without a commit the
-      // request ended and the change was gone — while the tool still reported
-      // success, which is the worst way for a write to fail.
-      let committed = false;
-      if (r.wroteRepo) {
-        await commitContext(`config: ${r.key} by ${await who(dir(), readConfig(dir()))} (via mcp)`,
-          gitCwd ? { cwd: gitCwd } : undefined);
       // Every other mutating tool commits; this one did not. A hosted write
       // lands in the session's in-memory copy of the repo, so without a commit
       // the request ended and the change was gone — while the tool still
       // reported success, which is the worst way for a write to fail.
       let committed = false;
       if (r.wroteRepo) {
-        const c = await commitContext(`config: ${r.key} (via mcp)`, gitCwd ? { cwd: gitCwd } : undefined);
+        // Reported rather than assumed: writing the value already stored leaves
+        // nothing to commit, and a caller told otherwise has a success it can
+        // only disprove by reading back.
+        const c = await commitContext(`config: ${r.key} by ${await who(dir(), readConfig(dir()))} (via mcp)`,
+          gitCwd ? { cwd: gitCwd } : undefined);
         committed = c?.committed === true;
       }
       const notes = r.notes.length ? ` Notes: ${r.notes.join(' | ')}` : '';
