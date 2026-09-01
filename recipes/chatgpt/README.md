@@ -1,12 +1,12 @@
 # ChatGPT — recipe guide
 
-ChatGPT cannot reach into your filesystem, so running a *recipe* is
-copy-paste: paste the recipe, paste the inputs it asks for, then paste the
-output back into your terminal.
+Running a *recipe* is copy-paste: paste the recipe, paste the inputs it asks
+for, then paste the output back into your terminal. A recipe is a prompt, so
+this works in any chat window and needs nothing set up on the project's side.
 
-> **This page is about the recipes, not about teamctx as a whole.** If your
-> ChatGPT supports custom MCP connectors, the hosted server is a second route
-> that needs no copy-paste at all — see [Using the hosted connector
+> **This page is about the recipes, not about teamctx as a whole.** teamctx also
+> runs over MCP, where the whole loop happens in conversation with nothing
+> pasted anywhere — see [Using the hosted connector
 > instead](#using-the-hosted-connector-instead) below.
 
 ## Recommended flow
@@ -59,9 +59,10 @@ the work, submit the contribution — with nothing pasted into a terminal.
 Ask the project's manager for the connector URL (`teamctx connect`), add it as
 a custom connector, and sign in.
 
-Whether a given client supports this is that client's question, not teamctx's,
-and the answer has changed more than once — so this page does not try to state
-it. Try adding the connector: if the tools appear, use them; if they do not,
-the copy-paste flow above is unaffected and always works.
+The loop itself is agent-agnostic — nothing in it is specific to one client.
+Whether a given client can add a custom MCP connector is that client's
+question, not teamctx's, so this page does not try to answer it. Try adding the
+connector: if the tools appear, use them; if they do not, the copy-paste flow
+above is unaffected and always works.
 
 See [docs/mcp-join.md](../../docs/mcp-join.md) for the joining member's steps.
