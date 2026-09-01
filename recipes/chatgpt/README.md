@@ -1,8 +1,13 @@
 # ChatGPT — recipe guide
 
-ChatGPT is browser-based and can't reach into your filesystem, so the flow is
-straight copy-paste: paste the recipe, paste the inputs it asks for, then
-paste the output back into your terminal.
+ChatGPT cannot reach into your filesystem, so running a *recipe* is
+copy-paste: paste the recipe, paste the inputs it asks for, then paste the
+output back into your terminal.
+
+> **This page is about the recipes, not about teamctx as a whole.** If your
+> ChatGPT supports custom MCP connectors, the hosted server is a second route
+> that needs no copy-paste at all — see [Using the hosted connector
+> instead](#using-the-hosted-connector-instead) below.
 
 ## Recommended flow
 
@@ -40,5 +45,23 @@ Same pattern:
   note and the current context — no need to paste the recipe every time.
 - If your workstream markdown is large, ChatGPT may truncate. Split the cleanup
   into workstream-sized passes rather than one full-tree pass.
-- ChatGPT can't run `teamctx` for you — always copy the final output back into
-  your terminal to actually record the contribution.
+- A recipe only produces text. Nothing is recorded until you copy the final
+  output back into your terminal — the recipe flow has no way to write to your
+  project.
+
+## Using the hosted connector instead
+
+The recipes above predate the hosted MCP server, and are the route that works
+in any chat client at all. If yours supports custom MCP connectors, the whole
+loop runs in conversation instead — list your tasks, pull a compiled prompt, do
+the work, submit the contribution — with nothing pasted into a terminal.
+
+Ask the project's manager for the connector URL (`teamctx connect`), add it as
+a custom connector, and sign in.
+
+Whether a given client supports this is that client's question, not teamctx's,
+and the answer has changed more than once — so this page does not try to state
+it. Try adding the connector: if the tools appear, use them; if they do not,
+the copy-paste flow above is unaffected and always works.
+
+See [docs/mcp-join.md](../../docs/mcp-join.md) for the joining member's steps.
