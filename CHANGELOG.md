@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **The ChatGPT recipe guide asserted what ChatGPT can do.** "ChatGPT can't run
+  `teamctx` for you" was written about the recipes, which are copy-paste by
+  nature, but read as a blanket capability claim — and it predates the hosted
+  MCP server, where the whole task loop runs in conversation. A claim about
+  someone else's client is the kind that goes stale unnoticed, so the page now
+  describes the recipe flow, points at the hosted connector as the route that
+  needs no terminal, and tells the reader to try it rather than taking our word
+  for what their client supports. Part of #46.
 - **A team member could make themselves the manager.** `config_set` accepted
   `manager` and `managerKey`, and nothing checked who was asking — so someone
   invited with deliberately reduced, roster-gated access could grant themselves
