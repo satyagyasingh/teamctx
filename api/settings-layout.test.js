@@ -79,6 +79,13 @@ describe('the settings page has a shape', () => {
     expect(await settings()).toContain(':focus{outline');
   });
 
+  it('carries the same navigation as every other page', async () => {
+    // Each page had its own header, so the links differed by page.
+    const body = await settings();
+    expect(body).toContain('class="bar"');
+    expect(body).toContain('class="brand"');
+  });
+
   it('pins who you are to the edge, away from what you do', async () => {
     expect(await settings()).toContain('.bar .who{margin-left:auto');
   });
@@ -139,11 +146,14 @@ describe('picking a project, and telling the header apart', () => {
     expect(body).not.toContain('<select id="project"');
   });
 
-  it('does not make an action look like a link', async () => {
-    // Home goes somewhere, New project makes something, and the login is who
-    // you are — three different things that looked identical.
+  it('says which page you are on', async () => {
+    // Every nav link looked the same, so nothing told you where you were.
     const body = await withRepos();
-    expect(body).toContain('class="btn-sm"');
-    expect(body).toContain('class="who muted"');
+    expect(body).toMatch(/href="\/settings" class="on" aria-current="page"/);
+    expect((body.match(/aria-current="page"/g) || []).length).toBe(1);
+  });
+
+  it('keeps who you are out of the navigation', async () => {
+    expect(await withRepos()).toContain('class="who muted"');
   });
 });

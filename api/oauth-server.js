@@ -658,14 +658,16 @@ h2{font-size:1rem;margin:0 0 .3rem}
 .card{border:1px solid var(--line);border-radius:.6rem;padding:1.15rem 1.3rem;margin:0 0 1.1rem;break-inside:avoid}
 .cols{margin-top:1.25rem}
 @media(min-width:52rem){.cols{columns:2;column-gap:1.1rem}}
-.bar{display:flex;align-items:center;gap:1.1rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.9rem;font-size:.9rem}
-.bar h1{margin:0;font-size:1.25rem}
+.bar{display:flex;align-items:center;gap:1.1rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.7rem;margin-bottom:1.5rem;font-size:.9rem}
+.bar .brand{font-weight:600;color:inherit;text-decoration:none;margin-right:.4rem}
+.bar a{text-decoration:none;padding:.2rem 0;border-bottom:2px solid transparent}
+.bar a:hover{border-bottom-color:var(--line)}
+/* Saying which page you are on, rather than leaving every link identical. */
+.bar a.on{color:inherit;font-weight:600;border-bottom-color:var(--accent)}
 /* Who you are belongs at the edge of the column, away from the things you do. */
 .bar .who{margin-left:auto;padding-left:1.1rem;border-left:1px solid var(--line)}
 /* Three different things sat side by side looking identical: a link that goes
    somewhere, an action that makes something, and who you are. */
-.btn-sm{background:var(--accent);color:#fff;text-decoration:none;padding:.32rem .7rem;border-radius:.4rem;white-space:nowrap}
-.btn-sm:hover{filter:brightness(1.08)}
 /* A <button> inside an <a> is invalid, and browsers render the pair as one
    stretched control with whatever follows crowding it. */
 .btn{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:.6rem 1.4rem;border-radius:.4rem}
@@ -694,16 +696,8 @@ code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}
 </style></head><body${wide ? ' class="wide"' : ''}>${body}</body></html>`;
 
 const settingsPage = ({ user, hasKey, saved, error, shared = [], lent = [], repos = [] }) => shell('Settings', `
-<div class="bar">
-  <h1>Settings</h1>
-  <a href="/">Home</a>
-  <a href="/settings/new-project" class="btn-sm">+ New project</a>
-  <span class="who muted">${esc(user.login)}
-    <form method="POST" action="/settings/logout" style="display:inline;margin:0">
-      <button type="submit" class="link">Sign out</button>
-    </form>
-  </span>
-</div>
+${navBar({ user, current: '/settings' })}
+<h1>Settings</h1>
 ${saved ? '<div class="ok">Saved.</div>' : ''}
 ${error ? `<div class="bad">${esc(error)}</div>` : ''}
 
@@ -810,7 +804,32 @@ const projectPicker = (id, repos) => (repos.length
      </datalist>`
   : `<input id="${id}" name="project" placeholder="owner/repo" required>`);
 
+/**
+ * The same navigation on every page, saying where you are.
+ *
+ * Each page carried its own header, so the links differed by page and none of
+ * them told you which one you were looking at. Signed out, only what is
+ * reachable is shown — offering Settings to somebody who cannot open it is a
+ * dead end dressed as a choice.
+ */
+const navBar = ({ user, current }) => {
+  const link = (href, label) => (href === current
+    ? `<a href="${href}" class="on" aria-current="page">${label}</a>`
+    : `<a href="${href}">${label}</a>`);
+  return `<nav class="bar">
+  <a href="/" class="brand">teamctx</a>
+  ${link('/', 'Home')}
+  ${user ? link('/settings', 'Settings') : ''}
+  ${user ? link('/settings/new-project', 'New project') : ''}
+  <span class="who muted">${user ? `${esc(user.login)}
+      <form method="POST" action="/settings/logout" style="display:inline;margin:0">
+        <button type="submit" class="link">Sign out</button>
+      </form>` : '<a href="/settings/signin">Sign in</a>'}</span>
+</nav>`;
+};
+
 const homePage = ({ user, projects = [] }) => shell('teamctx', `
+${navBar({ user, current: '/' })}
 <h1>teamctx</h1>
 <p>Your team's <strong>why</strong> — the reasoning behind what you have decided
 — kept in your own git repository, and handed to each person's AI assistant as
@@ -836,7 +855,6 @@ cadence.</p>
 
 <p class="actions">
   <a class="btn" href="${user ? '/settings/new-project' : '/settings/signin'}">${user ? 'Create a new project' : 'Start here'}</a>
-  ${user ? '<a href="/settings">Settings</a>' : ''}
 </p>
 ${user ? '' : '<p class="muted">Signing in creates nothing on its own — you choose the project on the next screen.</p>'}
 ${user && projects.length ? `
@@ -848,6 +866,7 @@ ${user && projects.length ? `
 ${user ? `<p class="muted" style="margin-top:2rem">Signed in as <strong>${esc(user.login)}</strong>.</p>` : ''}`);
 
 const newProjectPage = ({ user, orgs, projectName = '', orgLogin = '', error = null, suggestion = null }) => shell('New project', `
+${navBar({ user, current: '/settings/new-project' })}
 <h1>Create a new teamctx project</h1>
 <p>Signed in as <strong>${esc(user.login)}</strong>. This creates a new private
 GitHub repository and sets it up for teamctx — nothing to install, nothing to

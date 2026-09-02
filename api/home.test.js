@@ -71,6 +71,20 @@ describe('the front door', () => {
     expect(body).toContain('class="btn"');
   });
 
+  it('does not offer signed-out visitors a page they cannot open', async () => {
+    // Settings and New project both bounce to sign-in. Showing them is a dead
+    // end dressed as a choice.
+    const { body } = await get('/');
+    expect(body).not.toContain('href="/settings"');
+    expect(body).not.toContain('href="/settings/new-project"');
+    expect(body).toContain('Sign in');
+  });
+
+  it('marks exactly one nav item as the current page', async () => {
+    const { body } = await get('/');
+    expect((body.match(/aria-current="page"/g) || []).length).toBe(1);
+  });
+
   it('makes clear the work does not stop at setup', async () => {
     // "This isn't a one-time setup wizard" — the loop is the product.
     expect((await get('/')).body).toMatch(/loop, not a setup wizard/i);

@@ -43,7 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the edge of the column rather than in the middle of the actions.
   The home page's call to action was a `<button>` inside an `<a>`, which is
   invalid and renders as one stretched control with whatever follows jammed
-  against it. Both are styled links now. Part of #66.
+  against it. Both are styled links now.
+  All of which the pages now share: one navigation bar — Home, Settings, New
+  project — on every page, marking the one you are looking at. Each page carried
+  its own header before, so the links differed by page and none of them said
+  where you were. Signed out it offers only what is reachable: Settings and New
+  project both bounce to sign-in, and showing them is a dead end dressed as a
+  choice. Part of #66.
 - **The recipe guide asserted what a client can and cannot do.** "ChatGPT can't
   run `teamctx` for you" was scoped to the recipes, which are copy-paste by
   nature, but read as a blanket claim, and was never revisited when the hosted
