@@ -144,6 +144,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   key once, so asking for it a second time assumes you kept it. The two forms
   stay separate on purpose — a personal key and a project key are how you tell
   your own spend from the team's. Part of #66.
+- **Start from a repository you already have.** New-project onboarding could
+  only create one, so somebody who already had a repo was made to make a second.
+  It is the same path a failed-init retry already used — skip creation, run
+  `init` — so picking one from the list is all that was missing. A repo that is
+  already a teamctx project says so and names which, rather than reporting the
+  failure from inside `init`.
+- **The project-created page continues the flow instead of ending it.** It gave
+  the connector URL and stopped, which read as finished. It now says what to do
+  in that chat — describe the project, turn it into tasks, invite whoever is
+  doing it, review what comes back — and that the last pair is the loop rather
+  than the end of setup. Part of #66.
 - **A front door.** It describes the whole tree — why a team decided something,
   what that requires, how it gets done — and the per-role slice, rather than
   only the top level. There was no `/` route at all — every path started at

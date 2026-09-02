@@ -310,7 +310,7 @@ app.get('/settings/new-project', async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   if (!user) return res.redirect(303, '/settings/signin?returnTo=/settings/new-project');
   const orgs = await safeListOrgs(user.token);
-  res.send(newProjectPage({ user, orgs }));
+  res.send(newProjectPage({ user, orgs, repos: await listPushableRepos(user.token) }));
 });
 
 app.post('/settings/new-project', async (req, res) => {
@@ -330,8 +330,16 @@ app.post('/settings/new-project', async (req, res) => {
   const retryOwner = String(req.body?.repoOwner || '').trim();
   const retryRepo = String(req.body?.repoRepo || '').trim();
 
+  // Somebody who already has a repository should not be made to create a
+  // second one. It is the same path the retry uses — skip creation, run init —
+  // so the only new thing here is where owner/repo came from.
+  const existing = parseRepoRef(req.body?.existingRepo);
+
   let owner, repo;
-  if (retryOwner && retryRepo) {
+  if (existing) {
+    owner = existing.owner;
+    repo = existing.repo;
+  } else if (retryOwner && retryRepo) {
     owner = retryOwner;
     repo = retryRepo;
   } else {
@@ -380,6 +388,13 @@ app.post('/settings/new-project', async (req, res) => {
     // Repo exists but isn't initialized. Don't strand the manager here —
     // give them a retry that skips straight back to this step, not a dead
     // end. No second createRepo call: owner/repo travel as hidden fields.
+    if (existing && /already/i.test(e.message)) {
+      const orgs = await safeListOrgs(user.token);
+      return res.status(409).send(newProjectPage({
+        user, orgs, projectName, repos: await listPushableRepos(user.token),
+        error: `${owner}/${repo} is already a teamctx project. Open it from Settings, or pick a different repository.`,
+      }));
+    }
     return res.status(500).send(newProjectRetryPage({ owner, repo, projectName, error: e.message }));
   }
 
@@ -867,7 +882,7 @@ ${user && projects.length ? `
 </ul>` : ''}
 ${user ? `<p class="muted" style="margin-top:2rem">Signed in as <strong>${esc(user.login)}</strong>.</p>` : ''}`);
 
-const newProjectPage = ({ user, orgs, projectName = '', orgLogin = '', error = null, suggestion = null }) => shell('New project', `
+const newProjectPage = ({ user, orgs, projectName = '', orgLogin = '', error = null, suggestion = null, repos = [] }) => shell('New project', `
 ${navBar({ user, current: '/settings/new-project' })}
 <h1>Create a new teamctx project</h1>
 <p>Signed in as <strong>${esc(user.login)}</strong>. This creates a new private
@@ -886,16 +901,51 @@ ${suggestion ? `<p class="muted"><code>${esc(suggestion)}</code> is free — cli
   </select>
   <p class="muted">The repository is created private. You can change that later from GitHub if you want.</p>
   <button type="submit">Create project</button>
-</form>`);
+</form>
+${repos.length ? `
+<h2 style="margin-top:2.5rem">Or use a repository you already have</h2>
+<p class="muted">teamctx adds a <code>.teamctx/</code> directory to it and leaves
+everything else alone.</p>
+<form method="POST" action="/settings/new-project">
+  <label for="existingRepo">Repository</label>
+  <input list="existing-list" id="existingRepo" name="existingRepo"
+         placeholder="Type to search, or paste owner/repo" autocomplete="off" required>
+  <datalist id="existing-list">
+    ${repos.map(r => `<option value="${esc(r.fullName)}">`).join('')}
+  </datalist>
+  <label for="existingName">Project name</label>
+  <input id="existingName" name="projectName" placeholder="Q3 GTM Strategy" required>
+  <button type="submit">Set it up</button>
+</form>` : ''}`);
 
 const newProjectSuccessPage = ({ owner, repo, baseUrl }) => shell('Project created', `
 ${navBar({ user: null, current: null })}
 <h1>Your project is ready</h1>
 <p><code>${esc(owner)}/${esc(repo)}</code> was created on GitHub and initialized for teamctx.</p>
-<label>Paste this into Claude → Settings → Connectors → Add custom connector</label>
+<label>Paste this into your AI client as a custom connector</label>
 <input readonly value="${esc(baseUrl)}/api/mcp/${esc(owner)}/${esc(repo)}" onclick="this.select()">
-<p class="muted">Then click Connect and approve the GitHub consent screen. Tools
-appear right away — you can start adding tasks immediately.</p>`);
+<p class="muted">Claude: Settings → Connectors → Add custom connector. Then
+approve the GitHub consent screen.</p>
+
+<h2 style="margin-top:2.5rem">Then, in that chat</h2>
+<ol style="line-height:1.9;padding-left:1.2rem">
+  <li><strong>Tell it what the project is about.</strong> Paste from a
+    conversation you have already had, if you have one — it does not need to be
+    tidy, and you do not need to learn how teamctx stores it.</li>
+  <li><strong>Ask it to turn that into tasks.</strong> It proposes the work; you
+    keep what is right.</li>
+  <li><strong>Invite whoever is doing it.</strong> By email — they sign in with
+    Google, no GitHub account needed.</li>
+  <li><strong>Review what comes back.</strong> Their work queues for you rather
+    than landing, and you clear it on your own cadence.</li>
+</ol>
+<p class="muted">That last pair is the loop, not the end of setup: they keep
+pulling the current context and sending work back, you keep reviewing.</p>
+
+<p class="actions"><a class="btn" href="/settings">Add your AI key</a>
+  <a href="/">Home</a></p>
+<p class="muted">The model-backed tools need one. Share it with the project and
+your team can use it too.</p>`);
 
 const newProjectRetryPage = ({ owner, repo, projectName, error }) => shell('Almost there', `
 ${navBar({ user: null, current: null })}
