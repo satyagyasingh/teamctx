@@ -134,6 +134,9 @@ describe('suggesting a project name that is free', () => {
   it('does nothing without a name or an owner', async () => {
     expect(await suggestAvailableName('t', { name: '', owner: 'acme' })).toBe(null);
     expect(await suggestAvailableName('t', { name: 'gtm', owner: '' })).toBe(null);
+  });
+});
+
 describe('listing projects to pick from', () => {
   // The forms asked for owner/repo as free text, which means remembering the
   // exact spelling of something already chosen once — and a typo stores a

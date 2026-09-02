@@ -18,11 +18,18 @@ beforeAll(async () => {
 });
 afterAll(() => server?.close());
 
+// The page lists the repositories you can push to, so without stubbing this the
+// suite reaches api.github.com for real — slow, and dependent on the network.
 const settings = async () => {
   __resetMemory();
   await kvSet(keys.session('s'), { id: '1', login: 'ada', name: 'Ada', token: 't' });
-  const r = await fetch(`${base}/settings`, { headers: { cookie: 'teamctx_sid=s' } });
-  return await r.text();
+  const real = globalThis.fetch;
+  globalThis.fetch = async (u, o) => (String(u).includes('api.github.com')
+    ? { ok: true, status: 200, json: async () => ([]) }
+    : real(u, o));
+  try {
+    return await (await real(`${base}/settings`, { headers: { cookie: 'teamctx_sid=s' } })).text();
+  } finally { globalThis.fetch = real; }
 };
 
 const count = (body, re) => (body.match(re) || []).length;
