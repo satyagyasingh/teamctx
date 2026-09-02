@@ -647,29 +647,38 @@ const esc = (v) => String(v).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;'
 const shell = (title, body, { wide = false } = {}) => `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title} — teamctx</title><style>
-:root{color-scheme:light dark}
+:root{color-scheme:light dark;--accent:#2f6feb;--line:#8883;--dim:#888}
+@media(prefers-color-scheme:dark){:root{--accent:#6ea8fe}}
 body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1.25rem;line-height:1.55}
 body.wide{max-width:60rem}
 h1{font-size:1.25rem;margin-bottom:.25rem}
 h2{font-size:1rem;margin:0 0 .3rem}
 /* Sections were three stacked h1s separated by rules, which reads as one long
    document rather than as things you can act on one at a time. */
-.card{border:1px solid #8883;border-radius:.6rem;padding:1.15rem 1.3rem;margin:0}
-.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(23rem,1fr));gap:1.1rem;align-items:start;margin-top:1.25rem}
-.bar{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap;border-bottom:1px solid #8883;padding-bottom:.9rem}
+.card{border:1px solid var(--line);border-radius:.6rem;padding:1.15rem 1.3rem;margin:0 0 1.1rem;break-inside:avoid}
+.cols{margin-top:1.25rem}
+@media(min-width:52rem){.cols{columns:2;column-gap:1.1rem}}
+.bar{display:flex;align-items:baseline;gap:1.25rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.9rem}
+.bar h1{margin-right:auto}
+.bar .nav{margin:0;font-size:.9rem;display:flex;align-items:baseline;gap:.9rem}
 .bar h1{margin:0}
 .card label:first-of-type{margin-top:.75rem}
 .card button[type=submit]{margin-top:1rem}
 p{color:#666;margin-top:0}
 label{display:block;font-weight:500;margin:1.25rem 0 .35rem}
-input,select{width:100%;box-sizing:border-box;padding:.6rem .7rem;font-size:1rem;border:1px solid #ccc;border-radius:.4rem;background:transparent;color:inherit}
-button{margin-top:1.25rem;background:#1a1a1a;color:#fff;border:0;padding:.6rem 1.4rem;font-size:1rem;border-radius:.4rem;cursor:pointer}
-@media(prefers-color-scheme:dark){button{background:#eee;color:#111}input,select{border-color:#444}}
+input,select{width:100%;box-sizing:border-box;padding:.6rem .7rem;font-size:1rem;border:1px solid var(--line);border-radius:.4rem;background:Field;color:FieldText}
+/* The popup list is painted by the OS. A transparent select opted out of the
+   colour scheme, which rendered that list white-on-white. */
+option{background:Field;color:FieldText}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+button{margin-top:1.25rem;background:var(--accent);color:#fff;border:0;padding:.6rem 1.4rem;font-size:1rem;border-radius:.4rem;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+a{color:var(--accent)}
 .ok{background:#e8f5e9;color:#1b5e20;padding:.6rem .8rem;border-radius:.4rem;margin:1rem 0}
 .muted{font-size:.85rem;color:#888}
 .bad{background:#fdecea;color:#8b1a10;padding:.6rem .8rem;border-radius:.4rem;margin:1rem 0}
 @media(prefers-color-scheme:dark){.ok{background:#1b3a1e;color:#c8e6c9}.bad{background:#3a1b18;color:#f5c6c2}}
-button.link{background:none;border:0;padding:0;margin:0 0 0 .5rem;color:#888;
+button.link{background:none;border:0;padding:0;margin:0;color:var(--dim);
   font-size:.85rem;text-decoration:underline;cursor:pointer}
 code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}
 </style></head><body${wide ? ' class="wide"' : ''}>${body}</body></html>`;
@@ -677,14 +686,14 @@ code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}
 const settingsPage = ({ user, hasKey, saved, error, shared = [], lent = [], repos = [] }) => shell('Settings', `
 <div class="bar">
   <h1>Settings</h1>
-  <p class="muted" style="margin:0">
-    <a href="/">Home</a> ·
-    <a href="/settings/new-project">New project</a> ·
-    ${esc(user.login)}
-    <form method="POST" action="/settings/logout" style="display:inline;margin:0">
+  <div class="nav muted">
+    <a href="/">Home</a>
+    <a href="/settings/new-project">New project</a>
+    <span>${esc(user.login)}</span>
+    <form method="POST" action="/settings/logout" style="margin:0">
       <button type="submit" class="link">Sign out</button>
     </form>
-  </p>
+  </div>
 </div>
 ${saved ? '<div class="ok">Saved.</div>' : ''}
 ${error ? `<div class="bad">${esc(error)}</div>` : ''}

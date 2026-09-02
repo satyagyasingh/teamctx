@@ -52,6 +52,33 @@ describe('the settings page has a shape', () => {
     expect(await settings()).toContain('<body class="wide">');
   });
 
+  it('does not paint form controls out of the colour scheme', async () => {
+    // A transparent select opted out, so the OS painted its popup list
+    // white-on-white — options present, invisible, and only findable by the
+    // scrollbar next to them.
+    const body = await settings();
+    expect(body).not.toContain('background:transparent');
+    expect(body).toContain('option{background:Field');
+  });
+
+  it('packs the cards instead of leaving a hole under the short one', async () => {
+    // Three cards of different heights in a two-column grid put the third on a
+    // new row, leaving a gap beside it.
+    const body = await settings();
+    expect(body).toContain('columns:2');
+    expect(body).toContain('break-inside:avoid');
+  });
+
+  it('has a colour other than black and white', async () => {
+    const body = await settings();
+    expect(body).toContain('--accent');
+    expect(body).toContain('background:var(--accent)');
+  });
+
+  it('shows focus, which an outline-less control does not', async () => {
+    expect(await settings()).toContain(':focus{outline');
+  });
+
   it('offers a way back out', async () => {
     // A settings page with no link home is a dead end you close the tab on.
     expect(await settings()).toContain('href="/"');

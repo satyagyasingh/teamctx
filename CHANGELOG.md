@@ -26,7 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   heading with three cards that lay out side by side when there is room, the
   new-project link has moved into the header where the other navigation is, and
   there is a way back to the home page. The GitHub login in the header is
-  escaped, which it was not. Part of #66.
+  escaped, which it was not.
+  Four things found by looking at it: the project dropdown rendered its list
+  white-on-white, because a transparent select opts out of the colour scheme and
+  the popup is painted by the OS — the options were there, invisible, findable
+  only by the scrollbar beside them. Three cards of different heights in a
+  two-column grid left a hole under the short one, so they pack in columns now.
+  The header spread its links across the full width. And the whole thing was
+  black and white, with no focus ring on any control. Part of #66.
 - **The recipe guide asserted what a client can and cannot do.** "ChatGPT can't
   run `teamctx` for you" was scoped to the recipes, which are copy-paste by
   nature, but read as a blanket claim, and was never revisited when the hosted
