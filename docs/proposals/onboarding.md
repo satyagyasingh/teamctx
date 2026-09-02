@@ -40,7 +40,7 @@ Checked rather than assumed:
 - **The MCP server ships no `instructions`.** It is constructed with
   `{ name, version }` and `{ capabilities: { tools: {} } }` only. MCP's
   `initialize` response has an `instructions` field for exactly this, and
-  teamctx leaves it empty across 42 tools.
+  teamctx leaves it empty across 41 tools.
 
 That last one is the whole of #59 in one sentence: the protocol has a place to
 put the guidance, and we put nothing there.
@@ -48,7 +48,7 @@ put the guidance, and we put nothing there.
 ## Phase 1 — the agent knows what to do (#59)
 
 **Why first:** #66 assumes it, and it is the cheapest thing here that changes
-how the product feels. A generic agent connected to 42 tools currently guesses,
+how the product feels. A generic agent connected to 41 tools currently guesses,
 and during the walkthrough it guessed *explain the data model to the user*,
 which is the opposite of the point.
 
@@ -58,8 +58,8 @@ Two parts, both server-side, neither requiring the user to know anything:
 It should say what teamctx is for in two sentences, then give the two sequences
 that actually occur:
 
-- *a manager with a new project* — `init` → seed context from what they have
-  already said → propose a workstream → raise tasks
+- *a manager with a new project* — `init` → `workstream_use` → `contribute` the
+  context they already have → `task_add` / `task_compile`
 - *a member picking up work* — `list_tasks mine` → `task_compile` → do the work
   → `contribute`
 
@@ -72,7 +72,12 @@ accurate and answer "what does this do". A sequencing agent needs "reach for
 this when…". This is editing prose in `TOOLS`, not changing behaviour, and it
 is the half that keeps working in clients that ignore `instructions`.
 
-**Out of scope here:** per-persona tool filtering. Deciding a member should not
+**Out of scope here:** seeding context from a chat the user has already had.
+That is its own issue, filed alongside #59 and dependent on it — #59 is about
+the agent knowing when to reach for what already exists, not about adding a way
+to import a conversation.
+
+**Also out of scope:** per-persona tool filtering. Deciding a member should not
 *see* `member_add` is an authorization question, and the manager gate already
 answers it at call time. Hiding tools would mean two tool lists to keep honest.
 
