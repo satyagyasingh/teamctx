@@ -16,9 +16,10 @@
  * host surfaces this text to its model is that host's business and it varies.
  * Neither half is a substitute for the other.
  */
-export const INSTRUCTIONS = `teamctx keeps a team's shared context — the *why*
-behind their decisions — in their own git repository, and hands each person the
-slice of it they need. You are connected to one project.
+export const INSTRUCTIONS = `teamctx keeps a team's shared context in their own
+git repository: why they decided something, what that requires, and how it gets
+done — a three-level tree per workstream — plus a compiled view per role. You
+are connected to one project.
 
 ## Act, do not explain
 
