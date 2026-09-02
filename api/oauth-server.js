@@ -644,12 +644,22 @@ if (provider) {
 
 const esc = (v) => String(v).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 
-const shell = (title, body) => `<!doctype html><html lang="en"><head>
+const shell = (title, body, { wide = false } = {}) => `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title} — teamctx</title><style>
 :root{color-scheme:light dark}
 body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1.25rem;line-height:1.55}
+body.wide{max-width:60rem}
 h1{font-size:1.25rem;margin-bottom:.25rem}
+h2{font-size:1rem;margin:0 0 .3rem}
+/* Sections were three stacked h1s separated by rules, which reads as one long
+   document rather than as things you can act on one at a time. */
+.card{border:1px solid #8883;border-radius:.6rem;padding:1.15rem 1.3rem;margin:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(23rem,1fr));gap:1.1rem;align-items:start;margin-top:1.25rem}
+.bar{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap;border-bottom:1px solid #8883;padding-bottom:.9rem}
+.bar h1{margin:0}
+.card label:first-of-type{margin-top:.75rem}
+.card button[type=submit]{margin-top:1rem}
 p{color:#666;margin-top:0}
 label{display:block;font-weight:500;margin:1.25rem 0 .35rem}
 input,select{width:100%;box-sizing:border-box;padding:.6rem .7rem;font-size:1rem;border:1px solid #ccc;border-radius:.4rem;background:transparent;color:inherit}
@@ -662,18 +672,26 @@ button{margin-top:1.25rem;background:#1a1a1a;color:#fff;border:0;padding:.6rem 1
 button.link{background:none;border:0;padding:0;margin:0 0 0 .5rem;color:#888;
   font-size:.85rem;text-decoration:underline;cursor:pointer}
 code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}
-</style></head><body>${body}</body></html>`;
+</style></head><body${wide ? ' class="wide"' : ''}>${body}</body></html>`;
 
 const settingsPage = ({ user, hasKey, saved, error, shared = [], lent = [], repos = [] }) => shell('Settings', `
-<h1>teamctx settings</h1>
-<p>Signed in as <strong>${user.login}</strong>.
-  <form method="POST" action="/settings/logout" style="display:inline;margin:0">
-    <button type="submit" class="link">Sign out</button>
-  </form>
-</p>
-<p><a href="/settings/new-project"><button type="button">Create a new project</button></a></p>
+<div class="bar">
+  <h1>Settings</h1>
+  <p class="muted" style="margin:0">
+    <a href="/">Home</a> ·
+    <a href="/settings/new-project">New project</a> ·
+    ${esc(user.login)}
+    <form method="POST" action="/settings/logout" style="display:inline;margin:0">
+      <button type="submit" class="link">Sign out</button>
+    </form>
+  </p>
+</div>
 ${saved ? '<div class="ok">Saved.</div>' : ''}
 ${error ? `<div class="bad">${esc(error)}</div>` : ''}
+
+<div class="cols">
+<section class="card">
+<h2>Your AI key</h2>
 <p class="muted">Used only by the tools that call a model. Stored against your
 GitHub account, never written to your repo.</p>
 <form method="POST" action="/settings">
@@ -688,9 +706,10 @@ GitHub account, never written to your repo.</p>
   <button type="submit">Save</button>
 </form>
 
-<hr style="margin:2.5rem 0;border:0;border-top:1px solid #8883">
+</section>
 
-<h1>Share a key with a project</h1>
+<section class="card">
+<h2>Share a key with a project</h2>
 <p class="muted">Used by anyone on the project who has no key of their own. Never
 overrides someone's own key. You pay for what the project spends.</p>
 ${shared.length ? `<p class="muted">Sharing a key with:</p>${shared.map(slug => `
@@ -724,9 +743,10 @@ ${hasKey ? `
   <button type="submit">Share with project</button>
 </form>
 
-<hr style="margin:2.5rem 0;border:0;border-top:1px solid #8883">
+</section>
 
-<h1>Let members without a GitHub account join</h1>
+<section class="card">
+<h2>Let members join without GitHub</h2>
 <p class="muted">Lets people on the roster sign in with Google instead of GitHub,
 using the email you invited. Their work is committed under their own name and
 still comes to you for review. Roster only, this repository only.</p>
@@ -740,7 +760,9 @@ ${lent.length ? `<p class="muted">Lending access to:</p>${lent.map(slug => `
   <label for="lendProject">Project</label>
   ${projectPicker('lendProject', repos)}
   <button type="submit">Lend GitHub access</button>
-</form>`);
+</form>
+</section>
+</div>`, { wide: true });
 
 const choosePage = (state) => shell('Connect', `
 <h1>Connect to teamctx</h1>

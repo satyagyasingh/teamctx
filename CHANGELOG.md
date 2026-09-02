@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   limit is not a free name, and offering one would send the manager back into
   the same failure. Being unable to create in an organisation says that, and
   says to pick a personal account or ask an owner. Closes #58.
+- **The settings page read as one long document.** Three sections, each a
+  top-level heading separated by a horizontal rule, in a column narrow enough
+  that they could only stack — and the first had no heading at all, so it looked
+  like a continuation of the header. "Create a new project" sat above the
+  settings, ahead of whatever you actually came to change. It is now one page
+  heading with three cards that lay out side by side when there is room, the
+  new-project link has moved into the header where the other navigation is, and
+  there is a way back to the home page. The GitHub login in the header is
+  escaped, which it was not. Part of #66.
 - **The recipe guide asserted what a client can and cannot do.** "ChatGPT can't
   run `teamctx` for you" was scoped to the recipes, which are copy-paste by
   nature, but read as a blanket claim, and was never revisited when the hosted
