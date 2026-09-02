@@ -99,6 +99,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   review* rather than added. The tool descriptions carry the same guidance
   per-tool, because whether a host surfaces `instructions` to its model is that
   host's business and varies. Closes #59.
+- **A front door.** There was no `/` route at all — every path started at
+  `/settings`, which assumes you already know what teamctx is and that you have
+  a repository, so a manager sent the deployment URL had nowhere to arrive. The
+  landing page says what teamctx is, lays out the five steps in order rather
+  than revealing them one click at a time, and makes clear the work does not
+  stop at setup: teams keep pulling context and sending work back, and the
+  manager keeps reviewing. Signed in, the button continues where they left off.
+  `vercel.json` routes `/` to the server, without which the route would have
+  404'd in production while working locally. Part of #66.
 - **"What are my tasks?"** — `list_tasks` and `teamctx task list` take `mine`
   / `--mine`. The task loop shipped in #47 worked from the second step onward;
   the first one needed the caller to already know the exact display name this

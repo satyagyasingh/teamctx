@@ -38,6 +38,25 @@ function baseUrlFor(req) {
   return `${proto}://${host}`;
 }
 
+// ---- Home ------------------------------------------------------------
+
+/**
+ * Somewhere for a first-time visitor to land.
+ *
+ * There was no `/` route at all — every path started at `/settings`, which
+ * assumes you already know what teamctx is and that you have a repository. A
+ * manager sent the deployment URL had nowhere to arrive.
+ *
+ * The page is the whole funnel in one place on purpose: what this is, then the
+ * five steps in order, then one button. Somebody who wants to know what they
+ * are signing into can read it; somebody who already knows clicks Start.
+ */
+app.get('/', async (req, res) => {
+  const user = await currentUser(req);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(homePage({ user }));
+});
+
 // ---- Health / config check -------------------------------------------
 // Handy for confirming a deploy has its env vars before touching Claude.
 
@@ -695,6 +714,37 @@ const choosePage = (state) => shell('Connect', `
   <button type="button">Continue with GitHub</button></a></p>
 <p class="muted">Use Google if someone invited you to a project by email — sign
 in with that same address. Use GitHub if you work on the repository directly.</p>`);
+
+const homePage = ({ user }) => shell('teamctx', `
+<h1>teamctx</h1>
+<p>Your team's <strong>why</strong> — the reasoning behind what you have decided
+— kept in your own git repository, and handed to each person's AI assistant as
+the slice they need. Nothing to install. Nobody has to learn a new tool.</p>
+
+<h2 style="font-size:1rem;margin-top:2rem">How it works</h2>
+<ol style="line-height:1.9;padding-left:1.2rem">
+  <li><strong>Sign in with GitHub.</strong> Only the person setting the project
+    up needs an account.</li>
+  <li><strong>Point it at a project.</strong> Create a new private repository,
+    or use one you already have.</li>
+  <li><strong>Add your AI key.</strong> One key. Share it with the project and
+    your team can use it too.</li>
+  <li><strong>Connect your assistant.</strong> Paste one URL into Claude,
+    ChatGPT or whatever you use.</li>
+  <li><strong>Invite your team.</strong> They sign in with Google and start
+    working — no GitHub account needed.</li>
+</ol>
+
+<p>From there it is a loop, not a setup wizard: your team pulls the current
+context and their tasks, sends work back, and you review it on your own
+cadence.</p>
+
+<p style="margin-top:2rem">
+  <a href="${user ? '/settings' : '/settings/signin'}">
+    <button type="button">${user ? `Continue as ${esc(user.login)}` : 'Start here'}</button>
+  </a>
+</p>
+${user ? '' : '<p class="muted">Signing in creates nothing on its own — you choose the project on the next screen.</p>'}`);
 
 const newProjectPage = ({ user, orgs, projectName = '', orgLogin = '', error = null, suggestion = null }) => shell('New project', `
 <h1>Create a new teamctx project</h1>
