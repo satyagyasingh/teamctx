@@ -658,14 +658,19 @@ h2{font-size:1rem;margin:0 0 .3rem}
 .card{border:1px solid var(--line);border-radius:.6rem;padding:1.15rem 1.3rem;margin:0 0 1.1rem;break-inside:avoid}
 .cols{margin-top:1.25rem}
 @media(min-width:52rem){.cols{columns:2;column-gap:1.1rem}}
-.bar{display:flex;align-items:baseline;gap:1.25rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.9rem}
-.bar h1{margin-right:auto}
-.bar .nav{margin:0;font-size:.9rem;display:flex;align-items:center;gap:1.1rem}
+.bar{display:flex;align-items:center;gap:1.1rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.9rem;font-size:.9rem}
+.bar h1{margin:0;font-size:1.25rem}
+/* Who you are belongs at the edge of the column, away from the things you do. */
+.bar .who{margin-left:auto;padding-left:1.1rem;border-left:1px solid var(--line)}
 /* Three different things sat side by side looking identical: a link that goes
    somewhere, an action that makes something, and who you are. */
 .btn-sm{background:var(--accent);color:#fff;text-decoration:none;padding:.32rem .7rem;border-radius:.4rem;white-space:nowrap}
 .btn-sm:hover{filter:brightness(1.08)}
-.who{padding-left:1.1rem;border-left:1px solid var(--line)}
+/* A <button> inside an <a> is invalid, and browsers render the pair as one
+   stretched control with whatever follows crowding it. */
+.btn{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:.6rem 1.4rem;border-radius:.4rem}
+.btn:hover{filter:brightness(1.08)}
+.actions{display:flex;align-items:center;gap:1.25rem;margin-top:2rem}
 .bar h1{margin:0}
 .card label:first-of-type{margin-top:.75rem}
 .card button[type=submit]{margin-top:1rem}
@@ -691,15 +696,13 @@ code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}
 const settingsPage = ({ user, hasKey, saved, error, shared = [], lent = [], repos = [] }) => shell('Settings', `
 <div class="bar">
   <h1>Settings</h1>
-  <div class="nav">
-    <a href="/">Home</a>
-    <a href="/settings/new-project" class="btn-sm">+ New project</a>
-    <span class="who muted">${esc(user.login)}
-      <form method="POST" action="/settings/logout" style="display:inline;margin:0">
-        <button type="submit" class="link">Sign out</button>
-      </form>
-    </span>
-  </div>
+  <a href="/">Home</a>
+  <a href="/settings/new-project" class="btn-sm">+ New project</a>
+  <span class="who muted">${esc(user.login)}
+    <form method="POST" action="/settings/logout" style="display:inline;margin:0">
+      <button type="submit" class="link">Sign out</button>
+    </form>
+  </span>
 </div>
 ${saved ? '<div class="ok">Saved.</div>' : ''}
 ${error ? `<div class="bad">${esc(error)}</div>` : ''}
@@ -831,11 +834,9 @@ the slice they need. Nothing to install. Nobody has to learn a new tool.</p>
 context and their tasks, sends work back, and you review it on your own
 cadence.</p>
 
-<p style="margin-top:2rem">
-  <a href="${user ? '/settings/new-project' : '/settings/signin'}">
-    <button type="button">${user ? 'Create a new project' : 'Start here'}</button>
-  </a>
-  ${user ? '<a href="/settings" style="margin-left:.75rem">Settings</a>' : ''}
+<p class="actions">
+  <a class="btn" href="${user ? '/settings/new-project' : '/settings/signin'}">${user ? 'Create a new project' : 'Start here'}</a>
+  ${user ? '<a href="/settings">Settings</a>' : ''}
 </p>
 ${user ? '' : '<p class="muted">Signing in creates nothing on its own — you choose the project on the next screen.</p>'}
 ${user && projects.length ? `

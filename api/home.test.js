@@ -63,6 +63,14 @@ describe('the front door', () => {
     expect(body).toContain('/settings/signin');
   });
 
+  it('styles its call to action as a link, not a button inside one', async () => {
+    // A <button> nested in an <a> is invalid, and renders as a stretched pill
+    // with whatever follows jammed against it.
+    const { body } = await get('/');
+    expect(body).not.toMatch(/<a[^>]*>\s*<button/);
+    expect(body).toContain('class="btn"');
+  });
+
   it('makes clear the work does not stop at setup', async () => {
     // "This isn't a one-time setup wizard" — the loop is the product.
     expect((await get('/')).body).toMatch(/loop, not a setup wizard/i);

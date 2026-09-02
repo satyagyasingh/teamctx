@@ -39,7 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and it could not accept a name the capped listing had missed. Each picker
   gets its own list, since two sharing an id leaves the second empty. In the
   header, a link that goes somewhere, an action that makes something and the
-  account you are signed in as no longer look identical. Part of #66.
+  account you are signed in as no longer look identical, and the account sits at
+  the edge of the column rather than in the middle of the actions.
+  The home page's call to action was a `<button>` inside an `<a>`, which is
+  invalid and renders as one stretched control with whatever follows jammed
+  against it. Both are styled links now. Part of #66.
 - **The recipe guide asserted what a client can and cannot do.** "ChatGPT can't
   run `teamctx` for you" was scoped to the recipes, which are copy-paste by
   nature, but read as a blanket claim, and was never revisited when the hosted

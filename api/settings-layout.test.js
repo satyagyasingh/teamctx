@@ -79,6 +79,16 @@ describe('the settings page has a shape', () => {
     expect(await settings()).toContain(':focus{outline');
   });
 
+  it('pins who you are to the edge, away from what you do', async () => {
+    expect(await settings()).toContain('.bar .who{margin-left:auto');
+  });
+
+  it('never puts a button inside a link', async () => {
+    // Invalid, and browsers render the pair as one stretched control with
+    // whatever follows crowding it.
+    expect(await settings()).not.toMatch(/<a[^>]*>\s*<button/);
+  });
+
   it('offers a way back out', async () => {
     // A settings page with no link home is a dead end you close the tab on.
     expect(await settings()).toContain('href="/"');
