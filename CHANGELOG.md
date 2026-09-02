@@ -118,7 +118,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stop at setup: teams keep pulling context and sending work back, and the
   manager keeps reviewing. Signed in, the button continues where they left off.
   `vercel.json` routes `/` to the server, without which the route would have
-  404'd in production while working locally. Part of #66.
+  404'd in production while working locally.
+  Signed in, it stops being an explainer and becomes a hallway: it lists the
+  projects you have configured, deduplicated across the ones you share a key
+  with and the ones you lend access to, and links to settings plainly rather
+  than behind a vague "continue". One account can hold many projects — the
+  per-project settings live as rows on the one settings page, so every project
+  links to the same place. Part of #66.
 - **"What are my tasks?"** — `list_tasks` and `teamctx task list` take `mine`
   / `--mine`. The task loop shipped in #47 worked from the second step onward;
   the first one needed the caller to already know the exact display name this

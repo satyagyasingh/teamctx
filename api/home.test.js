@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'http';
+import { kvSet, keys, __resetMemory } from '../src/oauth/kv.js';
 
 /**
  * There was no `/` route at all — every path started at `/settings`, which
@@ -54,8 +55,54 @@ describe('the front door', () => {
     expect((await get('/')).body).toMatch(/creates nothing on its own/i);
   });
 
+  it('offers a way to settings for somebody already signed in', async () => {
+    // Signed out, the page is an explainer. Signed in, it is a hallway — and a
+    // hallway with no door to settings sends people back to a URL they have to
+    // remember.
+    const { body } = await get('/');
+    expect(body).toContain('/settings/signin');
+  });
+
   it('makes clear the work does not stop at setup', async () => {
     // "This isn't a one-time setup wizard" — the loop is the product.
     expect((await get('/')).body).toMatch(/loop, not a setup wizard/i);
+  });
+});
+
+describe('the front door, once you have set something up', () => {
+  const signedIn = async (path = '/') => {
+    __resetMemory();
+    await kvSet(keys.session('sid1'), { id: '1', login: 'ada', name: 'Ada', token: 't' });
+    await kvSet(keys.sharedProjects('1'), { projects: ['acme/ledger'] });
+    await kvSet(keys.lentProjects('1'), { projects: ['acme/docs', 'acme/ledger'] });
+    const r = await fetch(base + path, { headers: { cookie: 'teamctx_sid=sid1' } });
+    return await r.text();
+  };
+
+  it('offers settings plainly, not behind a vague continue', async () => {
+    // Without a link here, somebody who set a project up months ago has to
+    // remember a URL to change anything.
+    expect(await signedIn()).toContain('href="/settings"');
+  });
+
+  it('lists the projects they have configured', async () => {
+    const body = await signedIn();
+    expect(body).toContain('acme/ledger');
+    expect(body).toContain('acme/docs');
+  });
+
+  it('lists a project once even when it appears on both lists', async () => {
+    // A project you shared a key with *and* lent access to is one project.
+    const body = await signedIn();
+    expect((body.match(/acme\/ledger/g) || []).length).toBe(1);
+  });
+
+  it('says who they are signed in as', async () => {
+    expect(await signedIn()).toContain('ada');
+  });
+
+  it('leads with creating a project rather than the explainer', async () => {
+    // They have read it. The next thing they want is another project.
+    expect(await signedIn()).toContain('Create a new project');
   });
 });

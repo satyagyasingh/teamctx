@@ -54,7 +54,16 @@ function baseUrlFor(req) {
 app.get('/', async (req, res) => {
   const user = await currentUser(req);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(homePage({ user }));
+  // Somebody who already set a project up is not here to read the explainer.
+  // Their projects are the two lists they configured — there is no per-project
+  // settings page, so every one of them links to the same place.
+  const projects = user
+    ? [...new Set([
+        ...((await kvGet(keys.sharedProjects(user.id)))?.projects || []),
+        ...((await kvGet(keys.lentProjects(user.id)))?.projects || []),
+      ])].sort()
+    : [];
+  res.send(homePage({ user, projects }));
 });
 
 // ---- Health / config check -------------------------------------------
@@ -756,7 +765,7 @@ const projectPicker = (id, repos) => (repos.length
     </select>`
   : `<input id="${id}" name="project" placeholder="owner/repo" required>`);
 
-const homePage = ({ user }) => shell('teamctx', `
+const homePage = ({ user, projects = [] }) => shell('teamctx', `
 <h1>teamctx</h1>
 <p>Your team's <strong>why</strong> — the reasoning behind what you have decided
 — kept in your own git repository, and handed to each person's AI assistant as
@@ -781,11 +790,19 @@ context and their tasks, sends work back, and you review it on your own
 cadence.</p>
 
 <p style="margin-top:2rem">
-  <a href="${user ? '/settings' : '/settings/signin'}">
-    <button type="button">${user ? `Continue as ${esc(user.login)}` : 'Start here'}</button>
+  <a href="${user ? '/settings/new-project' : '/settings/signin'}">
+    <button type="button">${user ? 'Create a new project' : 'Start here'}</button>
   </a>
+  ${user ? '<a href="/settings" style="margin-left:.75rem">Settings</a>' : ''}
 </p>
-${user ? '' : '<p class="muted">Signing in creates nothing on its own — you choose the project on the next screen.</p>'}`);
+${user ? '' : '<p class="muted">Signing in creates nothing on its own — you choose the project on the next screen.</p>'}
+${user && projects.length ? `
+<h2 style="font-size:1rem;margin-top:2rem">Your projects</h2>
+<p class="muted">Keys and access are set per project, all from one page.</p>
+<ul style="line-height:1.9;padding-left:1.2rem">
+  ${projects.map(p => `<li><code>${esc(p)}</code></li>`).join('')}
+</ul>` : ''}
+${user ? `<p class="muted" style="margin-top:2rem">Signed in as <strong>${esc(user.login)}</strong>.</p>` : ''}`);
 
 const newProjectPage = ({ user, orgs, projectName = '', orgLogin = '', error = null, suggestion = null }) => shell('New project', `
 <h1>Create a new teamctx project</h1>
