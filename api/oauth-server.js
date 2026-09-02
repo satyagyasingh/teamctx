@@ -660,7 +660,12 @@ h2{font-size:1rem;margin:0 0 .3rem}
 @media(min-width:52rem){.cols{columns:2;column-gap:1.1rem}}
 .bar{display:flex;align-items:baseline;gap:1.25rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.9rem}
 .bar h1{margin-right:auto}
-.bar .nav{margin:0;font-size:.9rem;display:flex;align-items:baseline;gap:.9rem}
+.bar .nav{margin:0;font-size:.9rem;display:flex;align-items:center;gap:1.1rem}
+/* Three different things sat side by side looking identical: a link that goes
+   somewhere, an action that makes something, and who you are. */
+.btn-sm{background:var(--accent);color:#fff;text-decoration:none;padding:.32rem .7rem;border-radius:.4rem;white-space:nowrap}
+.btn-sm:hover{filter:brightness(1.08)}
+.who{padding-left:1.1rem;border-left:1px solid var(--line)}
 .bar h1{margin:0}
 .card label:first-of-type{margin-top:.75rem}
 .card button[type=submit]{margin-top:1rem}
@@ -686,13 +691,14 @@ code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}
 const settingsPage = ({ user, hasKey, saved, error, shared = [], lent = [], repos = [] }) => shell('Settings', `
 <div class="bar">
   <h1>Settings</h1>
-  <div class="nav muted">
+  <div class="nav">
     <a href="/">Home</a>
-    <a href="/settings/new-project">New project</a>
-    <span>${esc(user.login)}</span>
-    <form method="POST" action="/settings/logout" style="margin:0">
-      <button type="submit" class="link">Sign out</button>
-    </form>
+    <a href="/settings/new-project" class="btn-sm">+ New project</a>
+    <span class="who muted">${esc(user.login)}
+      <form method="POST" action="/settings/logout" style="display:inline;margin:0">
+        <button type="submit" class="link">Sign out</button>
+      </form>
+    </span>
   </div>
 </div>
 ${saved ? '<div class="ok">Saved.</div>' : ''}
@@ -790,10 +796,15 @@ in with that same address. Use GitHub if you work on the repository directly.</p
  * with nothing in it is worse than the field it replaced.
  */
 const projectPicker = (id, repos) => (repos.length
-  ? `<select id="${id}" name="project" required>
-      <option value="">Choose a project…</option>
-      ${repos.map(r => `<option value="${esc(r.fullName)}">${esc(r.fullName)}${r.private ? '' : ' (public)'}</option>`).join('')}
-    </select>`
+  // A `select` only jumps to the first letter, so finding one repo among
+  // dozens means scrolling. A datalist filters on any part of what you type,
+  // and still accepts a name that is not in the list — which matters, since the
+  // listing is capped and can miss one.
+  ? `<input list="${id}-list" id="${id}" name="project" placeholder="Type to search, or paste owner/repo"
+           autocomplete="off" required>
+     <datalist id="${id}-list">
+       ${repos.map(r => `<option value="${esc(r.fullName)}">`).join('')}
+     </datalist>`
   : `<input id="${id}" name="project" placeholder="owner/repo" required>`);
 
 const homePage = ({ user, projects = [] }) => shell('teamctx', `

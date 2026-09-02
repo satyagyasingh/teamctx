@@ -89,3 +89,51 @@ describe('the settings page has a shape', () => {
     expect(home).not.toContain('<body class="wide">');
   });
 });
+
+describe('picking a project, and telling the header apart', () => {
+  const withRepos = async () => {
+    __resetMemory();
+    await kvSet(keys.session('s'), { id: '1', login: 'ada', name: 'Ada', token: 't' });
+    const real = globalThis.fetch;
+    globalThis.fetch = async (u, o) => (String(u).includes('api.github.com/user/repos')
+      ? { ok: true, json: async () => ([
+          { full_name: 'acme/ledger', private: true, permissions: { push: true } },
+          { full_name: 'acme/docs', private: false, permissions: { push: true } },
+        ]) }
+      : real(u, o));
+    try {
+      return await (await real(`${base}/settings`, { headers: { cookie: 'teamctx_sid=s' } })).text();
+    } finally { globalThis.fetch = real; }
+  };
+
+  it('lets you type to narrow the list', async () => {
+    // A select only jumps on first letter, so one repo among dozens meant
+    // scrolling. A datalist matches any part of what is typed.
+    const body = await withRepos();
+    expect(body).toContain('<datalist');
+    expect(body).toContain('Type to search');
+  });
+
+  it('gives each picker its own list', async () => {
+    // Two datalists sharing an id silently leaves the second one empty.
+    const body = await withRepos();
+    expect(body).toContain('id="project-list"');
+    expect(body).toContain('id="lendProject-list"');
+  });
+
+  it('still accepts a project the listing missed', async () => {
+    // The listing is capped, so it can miss one. A datalist takes free text;
+    // a select would have made that unreachable.
+    const body = await withRepos();
+    expect(body).toContain('list="project-list"');
+    expect(body).not.toContain('<select id="project"');
+  });
+
+  it('does not make an action look like a link', async () => {
+    // Home goes somewhere, New project makes something, and the login is who
+    // you are — three different things that looked identical.
+    const body = await withRepos();
+    expect(body).toContain('class="btn-sm"');
+    expect(body).toContain('class="who muted"');
+  });
+});

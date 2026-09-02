@@ -33,7 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only by the scrollbar beside them. Three cards of different heights in a
   two-column grid left a hole under the short one, so they pack in columns now.
   The header spread its links across the full width. And the whole thing was
-  black and white, with no focus ring on any control. Part of #66.
+  black and white, with no focus ring on any control.
+  The project field also lets you type to narrow it. A `select` only jumps to
+  the first letter, so finding one repository among dozens meant scrolling —
+  and it could not accept a name the capped listing had missed. Each picker
+  gets its own list, since two sharing an id leaves the second empty. In the
+  header, a link that goes somewhere, an action that makes something and the
+  account you are signed in as no longer look identical. Part of #66.
 - **The recipe guide asserted what a client can and cannot do.** "ChatGPT can't
   run `teamctx` for you" was scoped to the recipes, which are copy-paste by
   nature, but read as a blanket claim, and was never revisited when the hosted
