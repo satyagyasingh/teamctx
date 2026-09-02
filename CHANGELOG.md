@@ -144,7 +144,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   key once, so asking for it a second time assumes you kept it. The two forms
   stay separate on purpose — a personal key and a project key are how you tell
   your own spend from the team's. Part of #66.
-- **A front door.** There was no `/` route at all — every path started at
+- **A front door.** It describes the whole tree — why a team decided something,
+  what that requires, how it gets done — and the per-role slice, rather than
+  only the top level. There was no `/` route at all — every path started at
   `/settings`, which assumes you already know what teamctx is and that you have
   a repository, so a manager sent the deployment URL had nowhere to arrive. The
   landing page says what teamctx is, lays out the five steps in order rather

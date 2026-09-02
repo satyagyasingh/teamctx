@@ -30,8 +30,22 @@ describe('the front door', () => {
   it('says what teamctx is before asking for anything', async () => {
     // Somebody arriving cold has not agreed to sign into anything yet.
     const { body } = await get('/');
-    expect(body).toMatch(/why/i);
     expect(body).toMatch(/git repository/i);
+  });
+
+  it('describes all three levels, not just the top one', async () => {
+    // The tree is why → what → how. Saying only "why" describes the root and
+    // drops what the team actually acts on.
+    const { body } = await get('/');
+    for (const level of ['why', 'what', 'how']) {
+      expect(body.toLowerCase(), `missing: ${level}`).toContain(`<strong>${level}</strong>`);
+    }
+  });
+
+  it('mentions that each person gets their own slice', async () => {
+    // The per-role compiled view is the thing teamctx does that a shared doc
+    // does not, and it was missing from the description entirely.
+    expect((await get('/')).body).toMatch(/role/i);
   });
 
   it('lays out the whole path, not just the next click', async () => {

@@ -831,9 +831,11 @@ const navBar = ({ user, current }) => {
 const homePage = ({ user, projects = [] }) => shell('teamctx', `
 ${navBar({ user, current: '/' })}
 <h1>teamctx</h1>
-<p>Your team's <strong>why</strong> — the reasoning behind what you have decided
-— kept in your own git repository, and handed to each person's AI assistant as
-the slice they need. Nothing to install. Nobody has to learn a new tool.</p>
+<p>Version control for the context behind your team's work: <strong>why</strong>
+you decided something, <strong>what</strong> that requires, and <strong>how</strong>
+it gets done. Kept in your own git repository, and handed to each person's AI
+assistant as the slice their role needs. Nothing to install. Nobody has to learn
+a new tool.</p>
 
 <h2 style="font-size:1rem;margin-top:2rem">How it works</h2>
 <ol style="line-height:1.9;padding-left:1.2rem">
