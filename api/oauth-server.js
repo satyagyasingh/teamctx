@@ -887,6 +887,7 @@ ${suggestion ? `<p class="muted"><code>${esc(suggestion)}</code> is free — cli
 </form>`);
 
 const newProjectSuccessPage = ({ owner, repo, baseUrl }) => shell('Project created', `
+${navBar({ user: null, current: null })}
 <h1>Your project is ready</h1>
 <p><code>${esc(owner)}/${esc(repo)}</code> was created on GitHub and initialized for teamctx.</p>
 <label>Paste this into Claude → Settings → Connectors → Add custom connector</label>
@@ -895,6 +896,7 @@ const newProjectSuccessPage = ({ owner, repo, baseUrl }) => shell('Project creat
 appear right away — you can start adding tasks immediately.</p>`);
 
 const newProjectRetryPage = ({ owner, repo, projectName, error }) => shell('Almost there', `
+${navBar({ user: null, current: null })}
 <h1>The repository was created, but setup didn't finish</h1>
 <div class="bad">${esc(error)}</div>
 <p><code>${esc(owner)}/${esc(repo)}</code> exists on GitHub. Try again — this
@@ -907,17 +909,20 @@ won't create a second repository.</p>
 </form>`);
 
 const signInPage = () => shell('Sign in', `
-<h1>teamctx settings</h1>
+${navBar({ user: null, current: '/settings' })}
+<h1>Sign in</h1>
 <p>Sign in with GitHub to set the API key used by the teamctx tools that call
 a model.</p>
-<p><a href="/settings/signin"><button type="button">Sign in with GitHub</button></a></p>
+<p class="actions"><a class="btn" href="/settings/signin">Sign in with GitHub</a></p>
 <p class="muted">GitHub will not prompt you again if you have already
 authorised teamctx. To sign in as a different account, revoke teamctx under
 <a href="https://github.com/settings/applications" target="_blank" rel="noreferrer">GitHub &rarr; Authorized OAuth Apps</a> first.</p>`);
 
 const errorPage = (message) => shell('Error', `
+${navBar({ user: null, current: null })}
 <h1>Something went wrong</h1>
-<p>${String(message).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</p>`);
+<p>${String(message).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</p>
+<p class="muted">Nothing was changed. <a href="/">Back to the start</a>.</p>`);
 
 // An Express app is already a (req, res) handler — exactly Vercel's shape.
 export default (req, res) => app(req, res);

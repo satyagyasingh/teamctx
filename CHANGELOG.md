@@ -49,7 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own header before, so the links differed by page and none of them said
   where you were. Signed out it offers only what is reachable: Settings and New
   project both bounce to sign-in, and showing them is a dead end dressed as a
-  choice. Part of #66.
+  choice. The sign-in, error, project-created and retry pages carry it too —
+  each was a dead end with no way back to the page explaining what you were
+  signing into. Part of #66.
 - **The recipe guide asserted what a client can and cannot do.** "ChatGPT can't
   run `teamctx` for you" was scoped to the recipes, which are copy-paste by
   nature, but read as a blanket claim, and was never revisited when the hosted

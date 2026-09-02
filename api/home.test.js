@@ -128,3 +128,30 @@ describe('the front door, once you have set something up', () => {
     expect(await signedIn()).toContain('Create a new project');
   });
 });
+
+describe('a signed-out visitor is never cornered', () => {
+  it('can get back out of the sign-in page', async () => {
+    // /settings signed out renders sign-in. Without navigation that is a dead
+    // end: no way back to the page explaining what you are signing into.
+    const r = await fetch(base + '/settings');
+    const body = await r.text();
+    expect(r.status).toBe(200);
+    expect(body).toContain('class="bar"');
+    expect(body).toContain('href="/"');
+  });
+
+  it('is sent to sign in, and back where they were going', async () => {
+    // Landing on /settings after signing in, when you asked for new-project,
+    // means doing the navigation again.
+    const r = await fetch(base + '/settings/new-project', { redirect: 'manual' });
+    expect(r.status).toBe(303);
+    expect(r.headers.get('location')).toContain('returnTo=/settings/new-project');
+  });
+
+  it('can get back out of an error page', async () => {
+    const r = await fetch(base + '/oauth/google/callback');
+    const body = await r.text();
+    expect(body).toContain('class="bar"');
+    expect(body).toMatch(/Nothing was changed/);
+  });
+});
