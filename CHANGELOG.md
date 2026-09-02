@@ -99,6 +99,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   review* rather than added. The tool descriptions carry the same guidance
   per-tool, because whether a host surfaces `instructions` to its model is that
   host's business and varies. Closes #59.
+- **Pick a project instead of spelling one, and share the key you already
+  saved.** The share and lend forms asked for `owner/repo` as free text, so
+  setting either meant remembering the exact spelling of a repository you had
+  already chosen once — and a typo stored a setting against a project that does
+  not exist, which fails silently later rather than at the point of the mistake.
+  Both now offer the repositories your token can push to, read-only ones left
+  out because offering a choice that gets refused a click later reads as a bug.
+  Sharing also gained "share the key I already saved": a provider shows an API
+  key once, so asking for it a second time assumes you kept it. The two forms
+  stay separate on purpose — a personal key and a project key are how you tell
+  your own spend from the team's. Part of #66.
 - **A front door.** There was no `/` route at all — every path started at
   `/settings`, which assumes you already know what teamctx is and that you have
   a repository, so a manager sent the deployment URL had nowhere to arrive. The

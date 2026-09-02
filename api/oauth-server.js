@@ -6,7 +6,7 @@ import { kvGet, kvSet, kvTake, kvDelete, keys, TTL, isPersistent } from '../src/
 import { googleAuthorizeUrl } from '../src/oauth/google.js';
 import { primaryEmail } from '../src/oauth/github-identity.js';
 import { lendDecision } from '../src/oauth/lend-decision.js';
-import { GithubSession, listUserOrgs, createRepo, slugifyProjectName, suggestAvailableName } from '../src/adapters/github.js';
+import { GithubSession, listUserOrgs, createRepo, slugifyProjectName, suggestAvailableName, listPushableRepos } from '../src/adapters/github.js';
 import { runWithSession } from '../src/session-context.js';
 import { initProject } from '../cli/commands/init.core.js';
 
@@ -258,9 +258,12 @@ app.get('/settings', async (req, res) => {
 
   const existing = await kvGet(keys.aiKey(user.id));
   const shared = (await kvGet(keys.sharedProjects(user.id)))?.projects || [];
+  // A dropdown instead of free text: nobody should have to remember the exact
+  // spelling of a repository they already chose once.
+  const repos = user.token ? await listPushableRepos(user.token) : [];
   const lent = (await kvGet(keys.lentProjects(user.id)))?.projects || [];
   res.send(settingsPage({
-    user, hasKey: !!existing, shared, lent,
+    user, hasKey: !!existing, shared, lent, repos,
     saved: req.query.saved === '1',
     error: req.query.error ? String(req.query.error) : null,
   }));
@@ -448,10 +451,24 @@ app.post('/settings/share', async (req, res) => {
   if (!user) return res.redirect(303, '/settings');
 
   const ref = parseRepoRef(req.body?.project);
-  if (!ref) return backToSettings(res, 'Write the project as owner/repo.');
-  const apiKey = String(req.body?.apiKey || '').trim();
-  if (!apiKey) return backToSettings(res, 'Paste the key to share.');
-  const provider_ = String(req.body?.provider || 'anthropic').trim();
+  if (!ref) return backToSettings(res, 'Pick a project first.');
+
+  // A provider shows a key once. Somebody who saved theirs here and no longer
+  // has it to hand would otherwise be unable to share the very key they already
+  // gave us — so reuse it rather than asking them to produce it again.
+  let apiKey, provider_;
+  if (req.body?.useMyKey) {
+    const mine = await kvGet(keys.aiKey(user.id));
+    if (!mine?.apiKey) {
+      return backToSettings(res, 'You have no saved key to share — paste one below instead.');
+    }
+    apiKey = mine.apiKey;
+    provider_ = mine.provider || 'anthropic';
+  } else {
+    apiKey = String(req.body?.apiKey || '').trim();
+    if (!apiKey) return backToSettings(res, 'Paste the key to share.');
+    provider_ = String(req.body?.provider || 'anthropic').trim();
+  }
 
   const allowed = await canShareWith(user.token, ref.owner, ref.repo);
   if (!allowed.ok) return backToSettings(res, allowed.why);
@@ -638,7 +655,7 @@ button.link{background:none;border:0;padding:0;margin:0 0 0 .5rem;color:#888;
 code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}
 </style></head><body>${body}</body></html>`;
 
-const settingsPage = ({ user, hasKey, saved, error, shared = [], lent = [] }) => shell('Settings', `
+const settingsPage = ({ user, hasKey, saved, error, shared = [], lent = [], repos = [] }) => shell('Settings', `
 <h1>teamctx settings</h1>
 <p>Signed in as <strong>${user.login}</strong>.
   <form method="POST" action="/settings/logout" style="display:inline;margin:0">
@@ -675,15 +692,26 @@ ${shared.length ? `<p class="muted">Sharing a key with:</p>${shared.map(slug => 
 </form>`).join('')}` : ''}
 <form method="POST" action="/settings/share">
   <label for="project">Project</label>
-  <input id="project" name="project" placeholder="owner/repo" required>
-  <label for="shareProvider">Provider</label>
-  <select id="shareProvider" name="provider">
-    <option value="anthropic">Anthropic</option>
-    <option value="openai">OpenAI</option>
-    <option value="gemini">Google Gemini</option>
-  </select>
-  <label for="shareKey">API key to share</label>
-  <input id="shareKey" name="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…" required>
+  ${projectPicker('project', repos)}
+${hasKey ? `
+  <label style="font-weight:400;margin-top:1rem">
+    <input type="checkbox" name="useMyKey" value="1" checked
+           onchange="document.getElementById('shareKeyFields').hidden = this.checked"
+           style="width:auto;margin-right:.4rem">
+    Share the key I already saved above
+  </label>
+  <p class="muted">A provider shows a key once. If you no longer have it to hand,
+  this is the way to share it.</p>` : ''}
+  <div id="shareKeyFields"${hasKey ? ' hidden' : ''}>
+    <label for="shareProvider">Provider</label>
+    <select id="shareProvider" name="provider">
+      <option value="anthropic">Anthropic</option>
+      <option value="openai">OpenAI</option>
+      <option value="gemini">Google Gemini</option>
+    </select>
+    <label for="shareKey">API key to share</label>
+    <input id="shareKey" name="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…">
+  </div>
   <button type="submit">Share with project</button>
 </form>
 
@@ -701,7 +729,7 @@ ${lent.length ? `<p class="muted">Lending access to:</p>${lent.map(slug => `
 </form>`).join('')}` : ''}
 <form method="POST" action="/settings/lend">
   <label for="lendProject">Project</label>
-  <input id="lendProject" name="project" placeholder="owner/repo" required>
+  ${projectPicker('lendProject', repos)}
   <button type="submit">Lend GitHub access</button>
 </form>`);
 
@@ -714,6 +742,19 @@ const choosePage = (state) => shell('Connect', `
   <button type="button">Continue with GitHub</button></a></p>
 <p class="muted">Use Google if someone invited you to a project by email — sign
 in with that same address. Use GitHub if you work on the repository directly.</p>`);
+
+/**
+ * Pick a project rather than spell one.
+ *
+ * Falls back to a text field when the listing failed or is empty — a dropdown
+ * with nothing in it is worse than the field it replaced.
+ */
+const projectPicker = (id, repos) => (repos.length
+  ? `<select id="${id}" name="project" required>
+      <option value="">Choose a project…</option>
+      ${repos.map(r => `<option value="${esc(r.fullName)}">${esc(r.fullName)}${r.private ? '' : ' (public)'}</option>`).join('')}
+    </select>`
+  : `<input id="${id}" name="project" placeholder="owner/repo" required>`);
 
 const homePage = ({ user }) => shell('teamctx', `
 <h1>teamctx</h1>
