@@ -260,6 +260,32 @@ describe('the manager gate cannot be talked around', () => {
   });
 });
 
+describe('asking who the manager is', () => {
+  // `config.manager` is the legacy display-name field and is empty on every
+  // project created since the gate moved to `managerKey` — so reading it
+  // answered "no manager" for a project that had one. Both tools are asserted
+  // together because fixing one and not the other is how this survived twice.
+  it('get_status reports the gate, not the empty legacy field', async () => {
+    const session = fakeSession();
+    const s = await asUser(session, ALICE, h => json(h.get_status()));
+    expect(s.manager).toBe(CONFIG.managerKey);
+    expect(s.manager).not.toBeNull();
+  });
+
+  it('get_config reports the same answer', async () => {
+    const session = fakeSession();
+    const c = await asUser(session, ALICE, h => json(h.get_config()));
+    expect(c.manager).toBe(CONFIG.managerKey);
+  });
+
+  it('keeps the display name available under its own name', async () => {
+    // Still worth returning — it is just not the answer to "who is the manager".
+    const session = fakeSession();
+    const s = await asUser(session, ALICE, h => json(h.get_status()));
+    expect(s).toHaveProperty('managerDisplayName');
+  });
+});
+
 describe('repairing a manager gate over the hosted server', () => {
   // Exposed here because the creator check refuses by identity, whatever
   // credential the request runs on — a member acting on the project's lent
