@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A broken manager gate now says so.** The refusal named the caller and
+  refused them in the same sentence — "only the configured manager
+  (name:Ada Lovelace) may approve or reject. You are Ada Lovelace
+  (github:123818561)" — which reads as a contradiction rather than a problem
+  with the project. It now says the gate is a display name, that nobody can
+  match one, and what to run. `teamctx config manager` says it unprompted too,
+  since every approval on such a project is already failing.
 - **A project created on the web was born with a gate its own creator could not
   pass.** `init` ran inside a session but with no ambient actor, so the caller
   resolved from `config.me` to `name:<display name>` — a key nobody can present
@@ -137,6 +144,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   history was the only record of where the commit came from — and it did not say.
 
 ### Added
+- **`teamctx config manager --repair`**, for projects created on the web before
+  #71 pinned their manager gate to `name:<display name>` — a value nobody can
+  match, so the creator was locked out of their own project with no way back
+  short of knowing to hand-edit `.teamctx/config.json`. Two of the three real
+  projects from onboarding testing carried one.
+  It re-pins the gate to the caller's own identity, and refuses outright unless
+  the gate is a display name. That refusal is the whole safety argument: against
+  a working gate this would be the privilege escalation #49 removed. It is safe
+  because a `name:` gate is *already* open — the value comes from `config.me`,
+  which is committed and shared, so anyone with the repository and no local git
+  identity already presents that key and passes. Repair does not open a door;
+  the door is open, and repair closes it.
+  CLI only, deliberately. Repairing needs a clone, which needs the push access
+  hand-editing would need anyway, so it grants nothing new — whereas over MCP it
+  would be reachable by a member acting on the project's *lent* credential,
+  which has push access while the member is emphatically not the manager.
+  Closes #73.
 - **A project no longer starts out knowing nothing.** A workstream is created
   with no whys and nothing pushed it out of that state, so the rendered context
   read "No context yet" until somebody contributed — a manager finished setup,

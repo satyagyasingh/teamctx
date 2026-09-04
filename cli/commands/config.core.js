@@ -2,6 +2,7 @@ import { readConfig, writeConfig } from '../../src/storage.js';
 import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
 import { resolveActor } from '../../src/actor.js';
 import { managerKeys } from '../../src/review.js';
+import { repairDecision } from '../../src/manager-repair.js';
 import { assertManager } from './review.core.js';
 import { writePrefs, resolveDisplayName, resolveIdentity, resolveActiveWorkstream } from '../../src/prefs.js';
 
@@ -61,6 +62,30 @@ export async function getConfig({ teamctxDir, projectDir } = {}) {
     autoPush: !!c.autoPush,
     workstreams: c.workstreams || [], roles: c.roles || [],
   };
+}
+
+/**
+ * Re-pin a manager gate that nobody can match.
+ *
+ * Deliberately not routed through `setConfig`: `managerKey` is off `WRITABLE`
+ * so that no caller can set the gate (see #49), and it must stay that way. This
+ * is the one narrow exception, and it carries its own precondition — the gate
+ * must already be one nobody can pass — rather than borrowing a general write
+ * path that would then be a general write path.
+ *
+ * CLI only. Repairing needs a clone, and a clone needs the push access that
+ * hand-editing the file would need anyway, so this grants nothing new. Over MCP
+ * it would be reachable by a member acting on the project's *lent* credential,
+ * which has push access while the member is emphatically not the manager.
+ */
+export async function repairManagerGate({ teamctxDir, projectDir } = {}) {
+  const config = readConfig(teamctxDir);
+  const actor = await resolveActor({ config, cwd: projectDir });
+  const decision = repairDecision({ config, actor });
+  if (!decision.ok) throw new InvalidConfigValueError(decision.why);
+
+  writeConfig({ ...config, managerKey: decision.to, managerKeys: [], manager: '' }, teamctxDir);
+  return { from: decision.from, to: decision.to, name: actor.name };
 }
 
 export async function setConfig({ key, value, teamctxDir, projectDir } = {}) {
