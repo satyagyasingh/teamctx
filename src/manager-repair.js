@@ -79,7 +79,12 @@ export function repairDecision({ config, actor, displayName, creatorEmail = null
     };
   }
 
-  const key = String(actor?.key || '');
+  // The email, not `actor.key`. A hosted GitHub caller resolves to
+  // `github:<id>`, which only that one surface can present — pinning it would
+  // rebuild the single-surface gate #71 existed to remove, and the same person
+  // signing in with Google would be locked out all over again.
+  const email = String(actor?.email || '').toLowerCase();
+  const key = email ? `git:${email}` : String(actor?.key || '');
   if (!key || key.startsWith(BROKEN_PREFIX)) {
     // Rewriting one unusable gate as another helps nobody, and would look like
     // it had worked.
@@ -90,5 +95,15 @@ export function repairDecision({ config, actor, displayName, creatorEmail = null
         + 'clone, or run this where you are signed in.',
     };
   }
-  return { ok: true, from: keys[0], to: key };
+  return {
+    ok: true, from: keys[0], to: key,
+    // Honest about a half-fix: an id-shaped gate works where it was set and
+    // nowhere else, so the caller should know to come back once their token can
+    // say what their address is.
+    ...(email ? {} : {
+      warning: 'Your session did not reveal an email address, so the gate is pinned to your '
+        + 'GitHub id. That works from GitHub but not from a Google sign-in. Re-authorise the '
+        + 'connector to pick up the email scope, then run this again to widen it.',
+    }),
+  };
 }

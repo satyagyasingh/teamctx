@@ -206,3 +206,51 @@ describe('the manager coming back over a chat client', () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe('what the repaired gate is pinned to', () => {
+  // The whole point of #71 was that a gate has to be presentable on every
+  // surface. Repairing to `github:<id>` rebuilds the single-surface gate it
+  // removed, and the same person signing in with Google is locked out again.
+  const broken = { managerKey: 'name:Satyagya Singh' };
+  const hosted = {
+    key: 'github:123818561', name: 'Satyagya Singh',
+    login: 'satyagyasingh', email: 'satyagyasingh@gmail.com',
+  };
+
+  it('pins the email, not the numeric id, when the caller has one', () => {
+    const r = repairDecision({
+      config: broken, actor: hosted, displayName: 'Satyagya Singh',
+      creatorEmail: 'satyagyasingh@gmail.com',
+    });
+    expect(r.to).toBe('git:satyagyasingh@gmail.com');
+    expect(r.to).not.toMatch(/^github:/);
+  });
+
+  it('falls back to the id only when no email is available', () => {
+    const noEmail = { ...hosted, email: null };
+    const r = repairDecision({
+      config: broken, actor: noEmail, displayName: 'Satyagya Singh',
+      creatorEmail: '123818561+satyagyasingh@users.noreply.github.com',
+    });
+    expect(r.to).toBe('github:123818561');
+  });
+
+  it('says so when it could only pin an id', () => {
+    // Half a fix that looks like a whole one is worse than the error it
+    // replaced — the gate works where it was set and nowhere else.
+    const noEmail = { ...hosted, email: null };
+    const r = repairDecision({
+      config: broken, actor: noEmail, displayName: 'Satyagya Singh',
+      creatorEmail: '123818561+satyagyasingh@users.noreply.github.com',
+    });
+    expect(r.warning).toMatch(/Google sign-in/);
+  });
+
+  it('says nothing extra when the email was pinned', () => {
+    const r = repairDecision({
+      config: broken, actor: hosted, displayName: 'Satyagya Singh',
+      creatorEmail: 'satyagyasingh@gmail.com',
+    });
+    expect(r.warning).toBeUndefined();
+  });
+});

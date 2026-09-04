@@ -108,6 +108,7 @@ export async function configManagerCommand(opts = {}) {
       console.log('\n✓ Manager gate repaired.');
       console.log(`  was: ${r.from}`);
       console.log(`  now: ${r.to} (${r.name})`);
+      if (r.warning) console.log(`\n  Note: ${r.warning}`);
       console.log('\nCommit and push .teamctx/config.json — the hosted server reads it from GitHub.\n');
     } catch (err) {
       console.error(`\nError: ${err.message}\n`);

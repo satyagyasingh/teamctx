@@ -163,7 +163,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Hosted callers read the creator from the commits API rather than `git log`.
   A token that cannot reveal its owner's email is treated as *unknown* rather
   than as a mismatch, since calling it one would refuse the creator on the one
-  surface where they have no other way in. That refusal is the whole safety argument: against
+  surface where they have no other way in.
+  The repaired gate is pinned to the caller's **email**, not to whatever key
+  their surface happens to use — a hosted GitHub caller resolves to
+  `github:<id>`, and pinning that would rebuild the single-surface gate #71
+  existed to remove, locking the same person out the moment they signed in with
+  Google. Where only an id could be pinned, it says so rather than leaving a
+  half-fix looking like a whole one. That refusal is the whole safety argument: against
   a working gate this would be the privilege escalation #49 removed. It is safe
   because a `name:` gate is *already* open — the value comes from `config.me`,
   which is committed and shared, so anyone with the repository and no local git

@@ -956,7 +956,8 @@ export function makeHandlers(projectRoot) {
       return textResult({
         ...r, committed: c?.committed === true,
         reportBack: `Tell the user: the manager gate was ${r.from}, which nobody could match. `
-          + `It is now ${r.to}, so they can approve again.`,
+          + `It is now ${r.to}, so they can approve again.`
+          + (r.warning ? ` Also tell them: ${r.warning}` : ''),
       });
     },
 
