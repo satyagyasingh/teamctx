@@ -101,8 +101,23 @@ whether or not the flag does.
    second `name:` key.
 5. `config manager` with a broken gate names the problem without being asked.
 
-## Open question
+## Checked: nothing can write a `name:` key any more
 
-**Does anything else write a `name:` key?** #71 closed the web path and made
-`init` refuse one. If another route can still produce one, repair treats a
-symptom. Worth grepping before building, and saying so in the PR either way.
+Worth confirming before building, since if another route still produced one this
+would be treating a symptom. It does not:
+
+- `manager` and `managerKey` are off `WRITABLE` (`config.core.js:30`), so
+  `config_set` refuses them — #49's fix.
+- `teamctx config manager` is read-only (`cli/index.js:177`).
+- `init` is the only remaining writer, and #71 made it refuse a `name:`
+  identity outright.
+
+So repair is a **one-time migration for projects created in a window that has
+closed**, not an ongoing safety net. That is the right thing for it to be, and
+it means the flag can be removed later without leaving a hole.
+
+It also settles the shape: because `managerKey` is deliberately off `WRITABLE`,
+`--repair` cannot go through `setConfig`'s normal path. It needs its own
+function with its own precondition — which is better anyway, since the
+precondition (*the gate is `name:`-prefixed*) is the entire safety argument and
+belongs somewhere it can be read and tested on its own.
