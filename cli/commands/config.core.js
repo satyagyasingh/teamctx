@@ -3,6 +3,7 @@ import { getModelsFor, getDefaultModelFor } from '../../src/ai.js';
 import { resolveActor } from '../../src/actor.js';
 import { managerKeys } from '../../src/review.js';
 import { repairDecision } from '../../src/manager-repair.js';
+import { projectCreator } from '../../src/project-creator.js';
 import { assertManager } from './review.core.js';
 import { writePrefs, resolveDisplayName, resolveIdentity, resolveActiveWorkstream } from '../../src/prefs.js';
 
@@ -81,7 +82,11 @@ export async function getConfig({ teamctxDir, projectDir } = {}) {
 export async function repairManagerGate({ teamctxDir, projectDir } = {}) {
   const config = readConfig(teamctxDir);
   const actor = await resolveActor({ config, cwd: projectDir });
-  const decision = repairDecision({ config, actor });
+  const displayName = await resolveDisplayName({ actor, config, teamctxDir });
+  const decision = repairDecision({
+    config, actor, displayName,
+    creatorEmail: await projectCreator(projectDir),
+  });
   if (!decision.ok) throw new InvalidConfigValueError(decision.why);
 
   writeConfig({ ...config, managerKey: decision.to, managerKeys: [], manager: '' }, teamctxDir);

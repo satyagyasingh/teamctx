@@ -149,8 +149,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   match, so the creator was locked out of their own project with no way back
   short of knowing to hand-edit `.teamctx/config.json`. Two of the three real
   projects from onboarding testing carried one.
-  It re-pins the gate to the caller's own identity, and refuses outright unless
-  the gate is a display name. That refusal is the whole safety argument: against
+  It re-pins the gate to the caller's own identity, and refuses unless two things
+  hold: the gate is a display name, and the caller is the project's creator. The
+  second matters because "the gate is already open" justifies passing it, not
+  taking it — repair turns "anyone may approve" into "only this person may", so
+  unguarded the first to run it takes the project and locks out the one it was
+  for. The creator is read from the repository rather than the config: the
+  author of the commit that added `.teamctx/config.json` ran `init`, and
+  history cannot be rewritten without the push access repair already needs. A
+  display name is the fallback when that history cannot be read. That refusal is the whole safety argument: against
   a working gate this would be the privilege escalation #49 removed. It is safe
   because a `name:` gate is *already* open — the value comes from `config.me`,
   which is committed and shared, so anyone with the repository and no local git

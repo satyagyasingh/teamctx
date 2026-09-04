@@ -35,6 +35,32 @@ committed and shared. So anyone with the repository and no local git identity
 already presents that key and passes the gate. Repair does not open a door; the
 door is open, and repair is what closes it.
 
+### Which is not the whole story
+
+"The gate is already open" justifies *passing* it. It does not justify *taking*
+it. Repair converts "anyone may approve" into "only this person may" — so
+without a check, the first person to run it takes the project and locks out the
+one it was for, with no way back through the tool, because the gate is valid
+afterwards and repair rightly refuses a valid gate.
+
+So the caller has to be recognised as the creator. The repository answers that
+better than the config does: the author of the commit that first added
+`.teamctx/config.json` is whoever ran `init`, and unlike anything inside that
+file, history cannot be rewritten without the push access repair already sits
+behind. It also survives the case a display name cannot — somebody whose git
+name is "Ada" repairing a gate that reads `name:Ada Lovelace` is the same
+person, and the email says so.
+
+A web-created project commits as `<id>+<login>@users.noreply.github.com`, so
+that form is unpacked rather than compared whole; otherwise the creator coming
+back as `github:<id>` fails to match a commit they authored themselves.
+
+When history can be read it decides, and the display name is not consulted —
+otherwise renaming yourself to the name on the gate walks past the stronger
+signal, which is the whole reason the stronger one is there. The name is the
+fallback for a shallow clone or a rewritten history, where refusing everybody
+would be worse.
+
 That gives the bar: **whoever can already change the gate by hand.** Editing
 `.teamctx/config.json` needs push access to the repository. A repair command
 gated on the same thing grants nothing new — it makes an existing capability

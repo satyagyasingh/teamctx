@@ -1,4 +1,5 @@
 import { managerKeys } from './review.js';
+import { isCreator } from './project-creator.js';
 
 /**
  * May this gate be repaired, and to what?
@@ -25,7 +26,7 @@ export function isBrokenGate(config) {
   return keys.length > 0 && keys.every(k => k.startsWith(BROKEN_PREFIX));
 }
 
-export function repairDecision({ config, actor } = {}) {
+export function repairDecision({ config, actor, displayName, creatorEmail = null } = {}) {
   const keys = managerKeys(config);
 
   if (keys.length === 0) {
@@ -40,6 +41,44 @@ export function repairDecision({ config, actor } = {}) {
         + 'Repair only replaces a display-name gate that nobody can match.',
     };
   }
+  // Whose gate is it? "The gate is already open" justifies passing it, not
+  // taking it: repair converts "anyone may approve" into "only this person
+  // may", so without a check the first to run it takes the project and locks
+  // out the person it was for, with no way back through the tool.
+  //
+  // Two ways to be recognised, and the caller needs either. The repository's own
+  // history is the stronger one and is tried first — the author of the commit
+  // that created `.teamctx/config.json` is the person who ran `init`, and unlike
+  // anything in that file, history cannot be edited without the push access
+  // repair already sits behind. The display name is the weaker fallback, for
+  // when the history cannot be read at all.
+  const named = keys[0].slice(BROKEN_PREFIX.length);
+  const byHistory = creatorEmail ? isCreator(creatorEmail, actor) : null;
+  const byName = String(displayName || actor?.name || '').trim().toLowerCase()
+    === named.trim().toLowerCase();
+
+  // When the history can be read it decides, and the name is not consulted:
+  // otherwise somebody renaming themselves to the name on the gate walks past
+  // the stronger signal, which is the whole reason the stronger one is there.
+  if (byHistory === false) {
+    return {
+      ok: false,
+      why: `${creatorEmail} created this project, and you are `
+        + `${actor?.email || actor?.key || 'unidentified'}. Repair re-pins the gate to whoever `
+        + 'runs it, so only its creator may. Ask them to run it, or edit '
+        + '`.teamctx/config.json` directly if you have agreed to take it over.',
+    };
+  }
+  if (byHistory === null && !byName) {
+    // No history to consult, so the name is all there is.
+    return {
+      ok: false,
+      why: `That gate belongs to "${named}", and this repository's history does not say who `
+        + `created it, so that name is all there is to go on. You are "${displayName || actor?.name || 'unidentified'}". `
+        + 'Set your name to match with `teamctx config name`, or edit `.teamctx/config.json` directly.',
+    };
+  }
+
   const key = String(actor?.key || '');
   if (!key || key.startsWith(BROKEN_PREFIX)) {
     // Rewriting one unusable gate as another helps nobody, and would look like
