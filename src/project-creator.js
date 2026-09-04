@@ -71,10 +71,11 @@ export async function projectCreator(cwd) {
  * to match the commit they themselves authored.
  */
 export function isCreator(creatorEmail, actor) {
-  if (!creatorEmail || !actor) return false;
+  if (!creatorEmail || !actor) return null;
   const email = String(creatorEmail).toLowerCase();
+  const mine = String(actor.email || '').toLowerCase();
 
-  if (String(actor.email || '').toLowerCase() === email) return true;
+  if (mine && mine === email) return true;
   if (String(actor.key || '').toLowerCase() === `git:${email}`) return true;
 
   const noreply = /^(?:(\d+)\+)?([^@]+)@users\.noreply\.github\.com$/.exec(email);
@@ -82,6 +83,14 @@ export function isCreator(creatorEmail, actor) {
     const [, id, login] = noreply;
     if (id && String(actor.key || '') === `github:${id}`) return true;
     if (login && String(actor.login || '').toLowerCase() === login.toLowerCase()) return true;
+    // A noreply address names an account outright, so not matching it is a real
+    // answer rather than a gap.
+    return false;
   }
-  return false;
+
+  // A plain address can only be compared against an address. A hosted caller
+  // whose token predates the `user:email` scope has none — and calling that a
+  // mismatch would lock the creator out of their own project over MCP, which is
+  // the failure this whole command exists to undo. Not knowing is not "no".
+  return mine ? false : null;
 }

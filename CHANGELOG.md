@@ -157,7 +157,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for. The creator is read from the repository rather than the config: the
   author of the commit that added `.teamctx/config.json` ran `init`, and
   history cannot be rewritten without the push access repair already needs. A
-  display name is the fallback when that history cannot be read. That refusal is the whole safety argument: against
+  display name is the fallback when that history cannot be read.
+  Available from a chat client as well as the CLI, which is where it matters
+  most — there is no clone there to fall back on and no file to edit by hand.
+  Hosted callers read the creator from the commits API rather than `git log`.
+  A token that cannot reveal its owner's email is treated as *unknown* rather
+  than as a mismatch, since calling it one would refuse the creator on the one
+  surface where they have no other way in. That refusal is the whole safety argument: against
   a working gate this would be the privilege escalation #49 removed. It is safe
   because a `name:` gate is *already* open — the value comes from `config.me`,
   which is committed and shared, so anyone with the repository and no local git

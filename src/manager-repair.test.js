@@ -152,3 +152,57 @@ describe('recognising the creator from the repository itself', () => {
     expect(r.why).toMatch(/history does not say/i);
   });
 });
+
+describe('the manager coming back over a chat client', () => {
+  // Everything about locking somebody out matters most here: over MCP there is
+  // no clone to fall back on and no file to hand-edit.
+  const broken = { managerKey: 'name:Satyagya Singh' };
+  const NO_EMAIL = { key: 'github:123818561', name: 'Satyagya Singh', login: 'satyagyasingh', email: null };
+  const WITH_EMAIL = { ...NO_EMAIL, email: 'satyagyasingh@gmail.com' };
+  const BOB = { key: 'github:999', name: 'Bob', login: 'bob', email: 'bob@example.com' };
+
+  it('recognises them from a web-created noreply commit without any email', () => {
+    // The web flow commits as <id>+<login>@users.noreply.github.com, which
+    // names the account outright — so a token with no email scope still matches.
+    const r = repairDecision({
+      config: broken, actor: NO_EMAIL, displayName: 'Satyagya Singh',
+      creatorEmail: '123818561+satyagyasingh@users.noreply.github.com',
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('does not refuse them when their token simply cannot say who they are', () => {
+    // A plain address in the history and no address on the token is *unknown*,
+    // not a mismatch. Treating it as one locked the creator out of their own
+    // project over the one surface where they cannot edit the file instead.
+    const r = repairDecision({
+      config: broken, actor: NO_EMAIL, displayName: 'Satyagya Singh',
+      creatorEmail: 'satyagyasingh@gmail.com',
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('still refuses somebody the history positively rules out', () => {
+    const r = repairDecision({
+      config: broken, actor: BOB, displayName: 'Bob', creatorEmail: 'satyagyasingh@gmail.com',
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it('refuses a stranger even when the token cannot be compared, if the name differs', () => {
+    // "Cannot tell" falls back to the name — it does not wave everybody through.
+    const stranger = { key: 'github:999', name: 'Bob', login: 'bob', email: null };
+    const r = repairDecision({
+      config: broken, actor: stranger, displayName: 'Bob', creatorEmail: 'satyagyasingh@gmail.com',
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it('uses the token email when it has one', () => {
+    const r = repairDecision({
+      config: broken, actor: WITH_EMAIL, displayName: 'anything at all',
+      creatorEmail: 'satyagyasingh@gmail.com',
+    });
+    expect(r.ok).toBe(true);
+  });
+});
