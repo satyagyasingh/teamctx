@@ -1,7 +1,34 @@
 import { promisify } from 'util';
 import { execFile } from 'child_process';
+import { getCurrentSession } from './session-context.js';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * The same answer, over the API, for a hosted caller with no clone to read.
+ *
+ * Without this the hosted surface has no history to consult and falls back to
+ * comparing display names — the weaker signal, in exactly the place where the
+ * caller is most likely to be somebody other than the creator.
+ */
+async function creatorViaApi(session) {
+  const { owner, repo, ghToken } = session;
+  if (!owner || !repo || !ghToken) return null;
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/commits?path=.teamctx/config.json&per_page=100`,
+      { headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json' } },
+    );
+    if (!res.ok) return null;
+    const list = await res.json();
+    if (!Array.isArray(list) || list.length === 0) return null;
+    // Newest first, so the last entry is the commit that created the file.
+    const email = list[list.length - 1]?.commit?.author?.email;
+    return email ? String(email).toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Who created this project, according to the repository itself.
@@ -21,6 +48,8 @@ const execFileAsync = promisify(execFile);
  * back rather than treating absence as a refusal.
  */
 export async function projectCreator(cwd) {
+  const session = getCurrentSession();
+  if (session) return creatorViaApi(session);
   try {
     const { stdout } = await execFileAsync('git', [
       'log', '--diff-filter=A', '--format=%ae', '--', '.teamctx/config.json',

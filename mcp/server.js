@@ -37,7 +37,7 @@ import {
 } from '../cli/commands/task.core.js';
 import { listMembers, addMember, removeMember } from '../cli/commands/member.core.js';
 import { reflectWorkstream } from '../cli/commands/reflect.core.js';
-import { getConfig, setConfig } from '../cli/commands/config.core.js';
+import { getConfig, setConfig, repairManagerGate } from '../cli/commands/config.core.js';
 import { resolveActor } from '../src/actor.js';
 import { resolveActiveWorkstream, resolveIdentity, resolveDisplayName } from '../src/prefs.js';
 import { INSTRUCTIONS } from './instructions.js';
@@ -410,6 +410,11 @@ export const TOOLS = [
       properties: { workstream: { type: 'string' } },
       additionalProperties: false,
     },
+  },
+  {
+    name: 'repair_manager_gate',
+    description: RISKY + "re-pins a manager gate that is a display name rather than an identity — projects created on the web before this was fixed carry one, and nobody can match it, so every approval fails. Refuses unless the gate is broken **and** the caller created the project, read from the commit that added .teamctx/config.json. Not a way to take over a project: against a working gate, or from anybody but the creator, it refuses." + REPORT,
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'config_set',
@@ -942,6 +947,17 @@ export function makeHandlers(projectRoot) {
       const r = await reflectWorkstream({ workstreamId: workstream, teamctxDir: dir(), projectDir: gitCwd });
       const reportBack = `Tell the user: reflected workstream "${r.workstreamId}"${r.rolesRegenerated.length ? `; regenerated roles: ${r.rolesRegenerated.join(', ')}` : ''}${r.pushed ? '; pushed' : ''}.`;
       return textResult({ workstreamId: r.workstreamId, rolesRegenerated: r.rolesRegenerated, pushed: r.pushed, pushError: r.pushError, reportBack });
+    },
+
+    async repair_manager_gate() {
+      const r = await repairManagerGate({ teamctxDir: dir(), projectDir: gitCwd });
+      const c = await commitContext(`config: repair manager gate (via mcp)`,
+        gitCwd ? { cwd: gitCwd } : undefined);
+      return textResult({
+        ...r, committed: c?.committed === true,
+        reportBack: `Tell the user: the manager gate was ${r.from}, which nobody could match. `
+          + `It is now ${r.to}, so they can approve again.`,
+      });
     },
 
     async config_set({ key, value }) {

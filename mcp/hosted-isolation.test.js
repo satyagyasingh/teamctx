@@ -260,6 +260,47 @@ describe('the manager gate cannot be talked around', () => {
   });
 });
 
+describe('repairing a manager gate over the hosted server', () => {
+  // Exposed here because the creator check refuses by identity, whatever
+  // credential the request runs on — a member acting on the project's lent
+  // token is still not the person who created it.
+  const brokenSession = () => {
+    const s = fakeSession();
+    const c = { ...CONFIG, managerKey: 'name:Alice Example', managerKeys: [] };
+    s.write('.teamctx/config.json', JSON.stringify(c));
+    return s;
+  };
+
+  it('lets the creator re-pin a gate nobody can match', async () => {
+    const session = brokenSession();
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ([{ commit: { author: { email: '1001+alice@users.noreply.github.com' } } }]),
+    });
+    const r = await asUser(session, ALICE, h => json(h.repair_manager_gate()));
+    expect(r).toMatchObject({ from: 'name:Alice Example', to: ALICE.key });
+    expect(session.configJson().managerKey).toBe(ALICE.key);
+  });
+
+  it('refuses somebody who did not create the project', async () => {
+    // The reason this is safe to expose at all. Bob reaches the repo on the
+    // project's lent credential, which has push access — the check is on who he
+    // is, not on what token carried the request.
+    const session = brokenSession();
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ([{ commit: { author: { email: '1001+alice@users.noreply.github.com' } } }]),
+    });
+    await expect(asUser(session, BOB, h => h.repair_manager_gate())).rejects.toThrow();
+    expect(session.configJson().managerKey).toBe('name:Alice Example');
+  });
+
+  it('refuses a gate that already works', async () => {
+    const session = fakeSession();
+    await expect(asUser(session, ALICE, h => h.repair_manager_gate())).rejects.toThrow(/real identity/i);
+  });
+});
+
 describe('tasks on the hosted server', () => {
   // Hosted mode has no filesystem: `dir()` hands back a project descriptor, not
   // a path. Every other storage reader already branches on the session; the

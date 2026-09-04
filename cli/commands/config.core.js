@@ -74,10 +74,11 @@ export async function getConfig({ teamctxDir, projectDir } = {}) {
  * must already be one nobody can pass — rather than borrowing a general write
  * path that would then be a general write path.
  *
- * CLI only. Repairing needs a clone, and a clone needs the push access that
- * hand-editing the file would need anyway, so this grants nothing new. Over MCP
- * it would be reachable by a member acting on the project's *lent* credential,
- * which has push access while the member is emphatically not the manager.
+ * Safe on either surface because the check is on *who is asking*, not on which
+ * credential carried the request: a member reaching the repo on the project's
+ * lent token still is not the person who created it. The creator comes from the
+ * repository — `git log` locally, the commits API when hosted, since a hosted
+ * caller has no clone to read.
  */
 export async function repairManagerGate({ teamctxDir, projectDir } = {}) {
   const config = readConfig(teamctxDir);
