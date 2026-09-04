@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Asking who the manager is answered "nobody" for projects that had one.**
+  `get_status` and `get_config` both read `config.manager`, the legacy
+  display-name field, which is empty on every project created since the gate
+  moved to `managerKey` — so an assistant asked "who can approve here?" reported
+  `manager: null` while the gate was set and working. Both now report the gate,
+  with the display name kept as `managerDisplayName`. They are fixed and tested
+  together, because fixing one and not the other is how this survived being
+  found twice.
 - **A broken manager gate now says so.** The refusal named the caller and
   refused them in the same sentence — "only the configured manager
   (name:Ada Lovelace) may approve or reject. You are Ada Lovelace

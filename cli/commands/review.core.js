@@ -61,7 +61,7 @@ export function assertManager(config, { actor, displayName } = {}) {
   }
   if (isLegacyManagerRef(config)) {
     // Names are settable by their owner, so a name-based gate is advisory only.
-    console.warn(`Warning: config.manager is a display name ("${config.manager}"), which anyone can set as their own. Run \`teamctx config manager --me\` as the manager to pin it to an identity.`);
+    console.warn(`Warning: config.manager is a display name ("${config.manager}"), which anyone can set as their own. Run \`teamctx config manager --repair\` as the manager to pin it to an identity.`);
   }
 }
 

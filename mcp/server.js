@@ -40,6 +40,7 @@ import { reflectWorkstream } from '../cli/commands/reflect.core.js';
 import { getConfig, setConfig, repairManagerGate } from '../cli/commands/config.core.js';
 import { resolveActor } from '../src/actor.js';
 import { resolveActiveWorkstream, resolveIdentity, resolveDisplayName } from '../src/prefs.js';
+import { managerKeys } from '../src/review.js';
 import { INSTRUCTIONS } from './instructions.js';
 
 export function resolveProjectDir(argv = process.argv.slice(2), env = process.env, cwd = process.cwd()) {
@@ -590,7 +591,12 @@ export function makeHandlers(projectRoot) {
         project: config.project,
         provider: config.provider || 'anthropic',
         model: config.model,
-        manager: config.manager || null,
+        // The gate, not `config.manager`. That field is the legacy display-name
+        // one and is empty on every project created since; reading it reported
+        // "no manager" for projects that had one, which is the question this
+        // field exists to answer.
+        manager: managerKeys(config)[0] || config.manager || null,
+        managerDisplayName: config.manager || null,
         // Who *this caller* is and where *they* are working — not the shared
         // config.me / config.activeWorkstream, which are only the defaults.
         me: me.name,
