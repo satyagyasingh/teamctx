@@ -44,7 +44,9 @@ describe('what the workspace bundle answers', () => {
 
   it('is built under /app, where it cannot shadow a server route', () => {
     // An `index.html` at the output root is served before any rewrite is read.
-    expect(vite).toMatch(/base: '\/app\/'/);
+    // The dev server has nothing to shadow and serves from the root, so what
+    // matters is what a *build* emits.
+    expect(vite).toMatch(/command === 'build' \? '\/app\/'/);
     expect(vite).toMatch(/outDir: '\.\.\/dist\/app'/);
   });
 });
