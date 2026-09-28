@@ -37,6 +37,29 @@ The page that serves it stays server-rendered and session-authenticated, so the
 bundle never sees a token: teamctx mints the session, the page boots the app with
 the project it is allowed to read.
 
+### The objections, and why none of them hold
+
+Three things argue for re-typing the screens as server-rendered HTML instead.
+None survives contact with this repository.
+
+- **"It would bloat the CLI."** It would not. `files` in `package.json`
+  whitelists `cli`, `src` and `mcp`. React and Vite are devDependencies, the
+  bundle lives outside that list, and `npm i -g teamctx` is unchanged.
+- **"It needs a second test harness."** Both repositories are on vitest 2.1.9.
+  The standalone app's tests port as they are, jsdom is a per-file
+  `@vitest-environment` annotation, and the 1,835 server tests are untouched.
+- **"The browser would hold a token."** It would not. The app calls teamctx's own
+  endpoints with the session cookie; GitHub tokens stay server-side exactly as
+  they are today.
+
+What is left against it is a build step and two idioms in one repository until
+Settings moves — a preference, not a requirement. What is left for it is that the
+interface arrives identical by construction rather than by transcription.
+Re-typing roughly 650 lines of JSX as template strings costs about twice the new
+code, needs a route, a handler and tests for every interaction the app does in
+place, and still cannot promise the same feel: a round trip loses scroll, focus
+and panel state.
+
 ## Serverless budget
 
 Vercel Hobby allows 12 functions per deployment. teamctx deploys 5 today
@@ -263,18 +286,25 @@ the natural home for them, and the work is already on the roadmap.
    role regeneration hold exactly as they do from the CLI and the assistant.
 4. A Tasks block, for the reason above.
 5. Conflict handling on commit, surfaced as the existing staleness banner.
-6. The read-only project page stays until the workspace reaches parity, and the
-   route only flips when it does.
+6. The read-only project page is replaced, not kept beside the workspace. Its
+   data function, `readProjectView`, is what the workspace reads through, so the
+   scope rules it already enforces come with it.
 
-## Suggested phasing
+## Build order
 
-| Phase | What lands | Done when |
-|---|---|---|
-| 0 | Vite build, `index.css` and the components vendored in, served behind `/project/:owner/:repo/workspace` | The page renders with real project data, read-only |
-| 1 | Tree (list + columns), contribution log, role drawer, context copy, ask | Parity with the standalone app's read paths |
-| 2 | Contribute → proposal → apply or queue, staleness banner | A member and a manager can both contribute, under the policy |
-| 3 | Tasks block, the manager's queue in the same rendering | `my_brief` has a home on the web |
-| 4 | Route flip: `/project/:owner/:repo` becomes the workspace | Nothing in phases 1–3 is outstanding |
+Nothing here is a staged rollout. There are no users yet, so the branch is built
+to done and deployed once — the order below is what depends on what, not a
+schedule of releases.
 
-Settings and New project are untouched throughout, and are only revisited once
-the workspace has been behaving correctly for long enough to trust it.
+| Step | What lands |
+|---|---|
+| 1 | Vite build wired into the deployment, `index.css` and the components vendored, the workspace booting on real project data at `/project/:owner/:repo` |
+| 2 | Read paths: tree in both views, contribution log, role drawer, context copy, ask |
+| 3 | Write path: contribute, the proposal card, apply or queue by policy, the staleness banner on a commit conflict |
+| 4 | What the interface had no slot for: the tasks block, the manager's queue as stacked proposal cards, the project row above the workstreams |
+| 5 | The project list rebuilt in the same visual language, and the read-only page retired |
+
+Settings and New project are untouched throughout — not out of caution, but
+because they are the one part of the web layer that already works and is not
+being redesigned here. Once the workspace is built, they port into it page by
+page, and the two-visual-systems seam (§11) closes with them.
