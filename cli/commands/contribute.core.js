@@ -1,9 +1,9 @@
-import { readProject, readConfig, readTree, writeTree, writeTreeMd, appendContribution, writeRoleFile, writeQueueItem, readContributions, listWorkstreamIds } from '../../src/storage.js';
+import { readConfig, readTree, appendContribution, writeQueueItem, listWorkstreamIds } from '../../src/storage.js';
 import { resolveTarget, isProjectLevel } from '../../src/project-level.js';
 import { digestTree } from '../../src/tree-digest.js';
 import { projectIsEmpty } from '../../src/context-gate.js';
-import { recompileInheritors } from '../../src/recompile.js';
-import { updateShared, generateRoleFile, serializeToMd } from '../../src/context.js';
+import { updateShared } from '../../src/context.js';
+import { landOperations } from '../../src/land-context.js';
 import { commitContext, pushContext } from '../../src/git.js';
 import { UnknownWorkstreamError } from './role.core.js';
 import { assertManager } from './review.core.js';
@@ -50,11 +50,6 @@ export function sourceTrailer(source) {
   return !source || source === 'cli' ? '' : `
 
 Source: ${source}`;
-}
-
-function workstreamDisplayName(id, workstream, config) {
-  if (isProjectLevel(id)) return config.project || workstream.name || 'project';
-  return config.workstreams?.find(w => w.id === id)?.name || workstream.name || config.project;
 }
 
 async function commitAndOptionallyPush(config, msg, projectDir) {
@@ -164,30 +159,9 @@ export async function contributeCore({
     };
   }
 
-  writeTree(targetId, updated, teamctxDir);
-  const contributions = readContributions(teamctxDir);
-  // A contribution to the project itself is not inheriting from anything, so it
-  // renders alone; a workstream renders under the project tree it inherits.
-  const project = isProjectLevel(targetId) ? null : readProject(teamctxDir);
-  writeTreeMd(
-    targetId,
-    serializeToMd(updated, workstreamDisplayName(targetId, updated, config), actor, contributions, { project }),
-    teamctxDir,
-  );
-
-  // A change to the project changes what every workstream inherits, and a
-  // compiled page does not re-read the project on its own.
-  if (isProjectLevel(targetId)) {
-    recompileInheritors({ project: updated, config, contributions, teamctxDir });
-  }
-
-  const rolesOnTarget = (config.roles || []).filter(r => resolveTarget(r.workstream) === targetId);
-  const rolesRegenerated = [];
-  for (const role of rolesOnTarget) {
-    const md = await generateRoleFile(updated, role, config.project, config, contributions, { project });
-    writeRoleFile(role.slug, md, teamctxDir);
-    rolesRegenerated.push(role.slug);
-  }
+  const { rolesRegenerated } = await landOperations({
+    targetId, operations, contributionId: contribution.id, author: actor, config, teamctxDir,
+  });
 
   const note = tagged === 'decision' ? ' [decision]' : '';
   const wsNote = isProjectLevel(targetId) ? '' : ` (${targetId})`;
