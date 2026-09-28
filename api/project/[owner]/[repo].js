@@ -1,5 +1,7 @@
 import { currentUser } from '../../../src/oauth/session.js';
-import { readWorkspace } from '../../../src/oauth/workspace.js';
+import {
+  readWorkspace, proposeContribution, applyContribution, discardContribution,
+} from '../../../src/oauth/workspace.js';
 import { ProjectViewError } from '../../../src/oauth/project-view.js';
 
 /**
@@ -18,7 +20,36 @@ const ACTIONS = {
   async bootstrap({ owner, repo, user }) {
     return readWorkspace({ owner, repo, user });
   },
+
+  async propose({ owner, repo, user, body }) {
+    const text = String(body?.text || '').trim();
+    if (!text) throw new BadRequest('Say something to contribute.');
+    return proposeContribution({ owner, repo, user, workstream: body.workstream, text });
+  },
+
+  async apply({ owner, repo, user, body }) {
+    if (!Array.isArray(body?.operations) || body.operations.length === 0) {
+      throw new BadRequest('There is nothing here to apply.');
+    }
+    return applyContribution({
+      owner,
+      repo,
+      user,
+      workstream: body.workstream,
+      text: String(body.text || ''),
+      summary: String(body.summary || ''),
+      operations: body.operations,
+    });
+  },
+
+  async discard({ owner, repo, user, body }) {
+    return discardContribution({
+      owner, repo, user, workstream: body?.workstream, text: String(body?.text || ''),
+    });
+  },
 };
+
+class BadRequest extends Error {}
 
 export default async function handler(req, res) {
   const owner = String(req.query.owner || '');
@@ -39,8 +70,12 @@ export default async function handler(req, res) {
   if (!run) return res.status(400).json({ error: `Unknown action "${action}".` });
 
   try {
-    res.status(200).json(await run({ owner, repo, user, req }));
+    res.status(200).json(await run({ owner, repo, user, req, body: req.body }));
   } catch (e) {
+    if (e instanceof BadRequest) return res.status(400).json({ error: e.message });
+    // The manager gate and the roster both refuse by throwing. Neither is a
+    // fault in the request, so neither is reported as one.
+    if (e.name === 'ManagerGateError') return res.status(403).json({ error: e.message });
     if (e instanceof ProjectViewError) return res.status(403).json({ error: e.message });
     res.status(500).json({ error: e.message || String(e) });
   }

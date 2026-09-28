@@ -7,7 +7,14 @@ import {
   askLane,
   proposeDiff,
 } from "./ai.js";
-import { SignedOutError, loadWorkspace, projectFromPath } from "./api.js";
+import {
+  SignedOutError,
+  loadWorkspace,
+  projectFromPath,
+  proposeContribution,
+  applyContribution,
+  discardContribution,
+} from "./api.js";
 
 function AddLaneModal({ onCancel, onAdd }) {
   const [name, setName] = useState("");
@@ -240,10 +247,15 @@ function ProposalReview({ proposal, workstream, onApprove, onReject }) {
       </div>
       <div className="proposal-actions">
         <button className="primary" onClick={onApprove}>
-          approve & merge
+          {proposal.willQueue ? "send for review" : "approve & merge"}
         </button>
         <button onClick={onReject}>reject (keep logged)</button>
       </div>
+      {proposal.willQueue && (
+        <p className="muted" style={{ margin: "8px 0 0", fontSize: 13 }}>
+          This project reviews changes like these. Your manager sees it next.
+        </p>
+      )}
     </div>
   );
 }
@@ -584,25 +596,80 @@ function MainApp() {
   const [error, setError] = useState("");
 
   const [pendingProposal, setPendingProposal] = useState(null);
-  // shape: { workstreamId, contributionId, summary, operations }
+  // shape: { workstreamId, text, source, summary, operations, willQueue }
+  const [notice, setNotice] = useState("");
+  const [project, setProject] = useState(null);
 
   const [distillModel, setDistillModel] = useState(DEFAULT_DISTILL_MODEL);
   const [askModel, setAskModel] = useState(DEFAULT_ASK_MODEL);
 
-  // Contributing runs teamctx's own path — the review policy decides whether it
-  // lands or queues, provenance is recorded, role files are regenerated — so it
-  // is a call to the server, not a file written from here. Wired in the step
-  // that adds it; the box below is live, its button is not.
-  async function handleContribute() {
-    setError("Contributing from the workspace is not wired up yet.");
+  // Contributing runs teamctx's own path on the server: the review policy
+  // decides whether it lands or waits, provenance is recorded, the role files
+  // are regenerated. Two calls, because the person sees what the model proposed
+  // before any of it is written — and the second call carries that proposal
+  // back, so the model is not asked twice and what lands is what they approved.
+  async function handleContribute({ text, source }) {
+    if (!current) return;
+    setError("");
+    setBusy({ workstreamId: current.id, kind: "propose" });
+    try {
+      const r = await proposeContribution({ ...project, workstream: current.id, text });
+      if (!r.operations.length) {
+        setError("Nothing in that changed the context. It is on the record either way.");
+        return;
+      }
+      setPendingProposal({
+        workstreamId: current.id,
+        text,
+        source,
+        summary: r.summary,
+        operations: r.operations,
+        willQueue: r.willQueue,
+      });
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function approveProposal() {
-    setError("Approving from the workspace is not wired up yet.");
+    if (!pendingProposal) return;
+    const { workstreamId, text, summary, operations } = pendingProposal;
+    setBusy({ workstreamId, kind: "propose" });
+    setError("");
+    try {
+      const r = await applyContribution({ ...project, workstream: workstreamId, text, summary, operations });
+      // The server hands back what it wrote, so the page shows the repository
+      // rather than a guess at what the repository now says.
+      setWorkstreams((prev) =>
+        prev.map((w) => (w.id === workstreamId ? { ...w, whys: r.workstream.whys || [] } : w)),
+      );
+      setContributions((prev) => ({ ...prev, [workstreamId]: r.contributions || prev[workstreamId] || [] }));
+      setPendingProposal(null);
+      if (r.queued) setNotice("Sent for review. Your manager decides when it lands.");
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
   }
 
-  function rejectProposal() {
+  async function rejectProposal() {
+    const discarded = pendingProposal;
     setPendingProposal(null);
+    if (!discarded) return;
+    // Rejected, and still said. The reading is thrown away; the contribution
+    // itself stays on the record.
+    try {
+      const r = await discardContribution({ ...project, workstream: discarded.workstreamId, text: discarded.text });
+      setContributions((prev) => ({
+        ...prev,
+        [discarded.workstreamId]: [...(prev[discarded.workstreamId] || []), r.contribution],
+      }));
+    } catch (err) {
+      setError(errorText(err));
+    }
   }
 
   const [answer, setAnswer] = useState("");
@@ -654,14 +721,15 @@ function MainApp() {
   // to read — because only it can answer them truthfully.
   useEffect(() => {
     (async () => {
-      const project = projectFromPath();
-      if (!project) {
+      const opened = projectFromPath();
+      setProject(opened);
+      if (!opened) {
         setError("No project in this address.");
         setReady(true);
         return;
       }
       try {
-        const data = await loadWorkspace(project);
+        const data = await loadWorkspace(opened);
         setGithubConfig({ name: `${data.project.owner}/${data.project.repo}`, roles: data.roles });
         setGithubMode(true);
         setWorkstreams(data.workstreams);
@@ -790,6 +858,7 @@ function MainApp() {
                     setAskInput("");
                     setAskQuoted("");
                     setPendingProposal(null);
+                    setNotice("");
                     setBusy(null);
                     setViewMode("column");
                     setAskOpen(false);
@@ -896,6 +965,7 @@ function MainApp() {
                     models={MODELS}
                   />
                   {error && <div className="error">Error: {error}</div>}
+                  {notice && <div className="answer">{notice}</div>}
                 </section>
               )}
               <section className="block">
@@ -1510,4 +1580,13 @@ export default function App() {
   const match = pathname.match(/^\/context\/([^/]+)$/);
   if (match) return <RolePage slug={match[1]} />;
   return <MainApp />;
+}
+
+/** A failed call, said the way the person can act on. */
+function errorText(err) {
+  if (err instanceof SignedOutError) {
+    window.location.href = err.signIn;
+    return "Signing you back in…";
+  }
+  return err.message || String(err);
 }

@@ -3,6 +3,7 @@ import { resolveTarget, isProjectLevel } from '../../src/project-level.js';
 import { digestTree } from '../../src/tree-digest.js';
 import { projectIsEmpty } from '../../src/context-gate.js';
 import { updateShared } from '../../src/context.js';
+import { applyOps } from '../../src/ops.js';
 import { landOperations } from '../../src/land-context.js';
 import { commitContext, pushContext } from '../../src/git.js';
 import { UnknownWorkstreamError } from './role.core.js';
@@ -68,6 +69,14 @@ export async function contributeCore({
   // Forwarded to the distiller. `import` sets intent:'document' so prose is
   // read for durable context rather than treated as a deliberate update.
   intent, avoid,
+  // A proposal this caller already has, from an earlier round trip.
+  //
+  // The web asks for one, shows it, and hands it back when somebody approves —
+  // two requests, and the distiller must not run twice: the second run would
+  // propose something else, and what was approved is not what would land. The
+  // policy is still applied to whatever comes back, so arriving this way buys
+  // no more trust than arriving any other way.
+  proposal = null,
   // Called with what the distiller proposed, before any of it is written.
   // Returning false abandons the write; the contribution stays logged either
   // way, exactly as it did when the terminal asked this question itself.
@@ -114,7 +123,13 @@ export async function contributeCore({
   const contribution = newContribution({ text, author: actor, authorKey, tagged, source, workstream: targetId });
   appendContribution(contribution, teamctxDir);
 
-  const { workstream: updated, summary, operations } = await updateShared(workstream, contribution, config, { intent, avoid });
+  const { workstream: updated, summary, operations } = proposal
+    ? {
+      workstream: applyOps(workstream, proposal.operations || [], contribution.id),
+      summary: proposal.summary,
+      operations: proposal.operations || [],
+    }
+    : await updateShared(workstream, contribution, config, { intent, avoid });
 
   if (!operations || operations.length === 0) {
     return {

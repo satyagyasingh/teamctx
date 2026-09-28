@@ -37,3 +37,19 @@ async function call({ owner, repo, action, body }) {
 }
 
 export const loadWorkspace = ({ owner, repo }) => call({ owner, repo, action: 'bootstrap' });
+
+/**
+ * A contribution, in two halves.
+ *
+ * `propose` asks what it means and writes nothing. `apply` hands back what was
+ * shown, so the model is not asked twice and what lands is what somebody
+ * approved. `discard` keeps the contribution on the record without it.
+ */
+export const proposeContribution = ({ owner, repo, workstream, text }) =>
+  call({ owner, repo, action: 'propose', body: { workstream, text } });
+
+export const applyContribution = ({ owner, repo, workstream, text, summary, operations }) =>
+  call({ owner, repo, action: 'apply', body: { workstream, text, summary, operations } });
+
+export const discardContribution = ({ owner, repo, workstream, text }) =>
+  call({ owner, repo, action: 'discard', body: { workstream, text } });

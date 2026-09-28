@@ -1,4 +1,8 @@
-import { readConfig, readTree, readContributions } from '../storage.js';
+import { readConfig, readTree, readContributions, appendContribution } from '../storage.js';
+import { commitContext } from '../git.js';
+import { runWithActor } from '../actor.js';
+import { contributeCore } from '../../cli/commands/contribute.core.js';
+import { needsReview } from '../review-policy.js';
 import { listAllWorkstreams } from '../../cli/commands/workstream.core.js';
 import { listMembers } from '../../cli/commands/member.core.js';
 import { inScope } from '../member-scope.js';
@@ -110,4 +114,87 @@ export async function readWorkspace({ owner, repo, user }) {
       scopedTo: allowed ? allowed.map(toKey) : null,
     };
   });
+}
+
+/**
+ * One contribution, across two requests.
+ *
+ * The interface asks the model what a contribution means, shows the person the
+ * diff, and only writes when they say so. Over HTTP that is two calls, and the
+ * model must not run in both: the second run would propose something else, and
+ * what was approved would not be what landed. So the proposal comes back with
+ * the approval, and the policy is applied to it then — arriving that way earns
+ * no trust that contributing any other way would not.
+ */
+export async function proposeContribution({ owner, repo, user, workstream, text }) {
+  return openProject({ owner, repo, user }, async ({ actor, isManager }) => runWithActor(actor, async () => {
+    let queues = false;
+    const r = await contributeCore({
+      text,
+      workstreamId: toTarget(workstream),
+      source: 'web',
+      // Nothing is written in this half. The person has not seen it yet.
+      onProposed: async (p) => { queues = p.willQueue; return false; },
+    });
+    return {
+      summary: r.summary,
+      operations: r.operations || [],
+      // What the button will do, decided by the project rather than guessed by
+      // the browser: a manager lands it, anybody else sends it for review.
+      willQueue: queues && !isManager,
+      mode: r.mode,
+    };
+  }));
+}
+
+export async function applyContribution({ owner, repo, user, workstream, text, summary, operations }) {
+  return openProject({ owner, repo, user }, async ({ actor, isManager, config }) => runWithActor(actor, async () => {
+    const r = await contributeCore({
+      text,
+      workstreamId: toTarget(workstream),
+      source: 'web',
+      proposal: { summary, operations },
+      // A manager approving their own proposal is approving it, not bypassing
+      // review. Anyone else goes through whatever the policy says — and
+      // `contributeCore` refuses `apply` to anyone the gate does not name, so
+      // this cannot be claimed by asking.
+      apply: isManager,
+    });
+    return {
+      mode: r.mode,
+      id: r.id,
+      queued: r.mode === 'queued',
+      needsReview: needsReview(config, operations || []),
+      workstream: readTree(toTarget(workstream)),
+      contributions: readContributions().filter(c => String(c.workstream ?? PROJECT_KEY) === String(toTarget(workstream) ?? PROJECT_KEY)),
+      rolesRegenerated: r.rolesRegenerated || [],
+    };
+  }));
+}
+
+/**
+ * Rejected, and still on the record.
+ *
+ * The contribution is what somebody said; the operations are one reading of it.
+ * Throwing away the reading should not throw away the saying — the old
+ * interface called this "reject (keep logged)" and it was right to.
+ */
+export async function discardContribution({ owner, repo, user, workstream, text }) {
+  return openProject({ owner, repo, user }, async ({ actor }) => runWithActor(actor, async () => {
+    const target = toTarget(workstream);
+    const contribution = {
+      id: `web-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      ts: new Date().toISOString(),
+      author: actor.name || actor.email || 'unknown',
+      authorKey: actor.key,
+      text,
+      tagged: null,
+      source: 'web',
+      workstream: target,
+      status: 'logged',
+    };
+    appendContribution(contribution);
+    await commitContext(`log: ${contribution.author} contribution (not applied)\n\nSource: web`);
+    return { id: contribution.id, contribution };
+  }));
 }
