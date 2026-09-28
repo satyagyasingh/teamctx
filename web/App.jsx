@@ -14,6 +14,9 @@ import {
   proposeContribution,
   applyContribution,
   discardContribution,
+  approveQueued,
+  rejectQueued,
+  markTask,
 } from "./api.js";
 
 function AddLaneModal({ onCancel, onAdd }) {
@@ -235,10 +238,13 @@ function OpCard({ op, workstream }) {
   return null;
 }
 
-function ProposalReview({ proposal, workstream, onApprove, onReject }) {
+function ProposalReview({
+  proposal, workstream, onApprove, onReject,
+  heading = "Proposed change", approveLabel = null, rejectLabel = "reject (keep logged)",
+}) {
   return (
     <div className="proposal">
-      <h3>Proposed change</h3>
+      <h3>{heading}</h3>
       <div className="summary">{proposal.summary}</div>
       <div>
         {(proposal.operations || []).map((op, i) => (
@@ -247,9 +253,9 @@ function ProposalReview({ proposal, workstream, onApprove, onReject }) {
       </div>
       <div className="proposal-actions">
         <button className="primary" onClick={onApprove}>
-          {proposal.willQueue ? "send for review" : "approve & merge"}
+          {approveLabel || (proposal.willQueue ? "send for review" : "approve & merge")}
         </button>
-        <button onClick={onReject}>reject (keep logged)</button>
+        <button onClick={onReject}>{rejectLabel}</button>
       </div>
       {proposal.willQueue && (
         <p className="muted" style={{ margin: "8px 0 0", fontSize: 13 }}>
@@ -366,6 +372,62 @@ function LogRow({ c }) {
         <span className="log-chevron">{expanded ? "▲" : "▼"}</span>
       </div>
       {expanded && <div className="log-body">{c.text}</div>}
+    </div>
+  );
+}
+
+/**
+ * What is open, and who has it.
+ *
+ * The interface this came from had no idea a task existed — it held statements
+ * and the contributions behind them. So this is the log's own row, which
+ * already knows how to hold a chip, a name and a status and open when clicked.
+ */
+function TaskRow({ task, mine, onToggle }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className={`log-row${task.status === "done" ? " expanded" : ""}`}>
+      <div className="log-meta">
+        <span className={`chip ${mine ? "human-ai" : "human"}`}>
+          {task.status === "done" ? "done" : "open"}
+        </span>
+        <span>{task.title}</span>
+        <span className="status logged">· {task.owner || "nobody yet"}</span>
+        <button
+          className="ghost"
+          style={{ marginLeft: "auto", fontSize: 12, padding: "2px 8px" }}
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            await onToggle(task, task.status === "done" ? "open" : "done");
+            setBusy(false);
+          }}
+        >
+          {task.status === "done" ? "reopen" : "mark done"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TaskList({ tasks, me, onToggle }) {
+  if (!tasks.length) return <div className="empty-state">Nothing open here.</div>;
+  // Yours first: the question somebody opens this page with is what they are
+  // meant to be doing, not what everyone is.
+  const ordered = [...tasks].sort((a, b) => {
+    const mine = (t) => (t.owner && me && t.owner.toLowerCase() === me.toLowerCase() ? 0 : 1);
+    return mine(a) - mine(b) || (a.status === b.status ? 0 : a.status === "open" ? -1 : 1);
+  });
+  return (
+    <div className="log">
+      {ordered.map((t) => (
+        <TaskRow
+          key={t.id}
+          task={t}
+          mine={!!(t.owner && me && t.owner.toLowerCase() === me.toLowerCase())}
+          onToggle={onToggle}
+        />
+      ))}
     </div>
   );
 }
@@ -598,6 +660,8 @@ function MainApp() {
   const [pendingProposal, setPendingProposal] = useState(null);
   // shape: { workstreamId, text, source, summary, operations, willQueue }
   const [notice, setNotice] = useState("");
+  const [tasks, setTasks] = useState([]);
+  const [pending, setPending] = useState([]);
   const [project, setProject] = useState(null);
 
   const [distillModel, setDistillModel] = useState(DEFAULT_DISTILL_MODEL);
@@ -652,6 +716,38 @@ function MainApp() {
       setError(errorText(err));
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function approveQueuedItem(id) {
+    setError("");
+    try {
+      const r = await approveQueued({ ...project, id });
+      setWorkstreams((prev) =>
+        prev.map((w) => (w.id === r.workstream ? { ...w, whys: r.tree?.whys || w.whys } : w)),
+      );
+      setPending(r.pending || []);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
+
+  async function rejectQueuedItem(id) {
+    setError("");
+    try {
+      setPending((await rejectQueued({ ...project, id })).pending || []);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
+
+  async function toggleTask(task, status) {
+    setError("");
+    try {
+      const r = await markTask({ ...project, id: task.id, status });
+      setTasks((prev) => prev.map((t) => (t.id === r.task.id ? r.task : t)));
+    } catch (err) {
+      setError(errorText(err));
     }
   }
 
@@ -734,6 +830,8 @@ function MainApp() {
         setGithubMode(true);
         setWorkstreams(data.workstreams);
         setContributions(data.contributions);
+        setTasks(data.tasks || []);
+        setPending(data.pending || []);
         setSelectedId(data.workstreams[0]?.id ?? null);
         setMe(data.me.name);
         setMyRole(data.me.role || (data.me.isManager ? "admin" : ""));
@@ -867,6 +965,8 @@ function MainApp() {
                   <div className="ws-item-row">
                     <span>{w.name}</span>
                     <span className="counts">
+                      {pending.filter((q) => q.workstream === w.id).length > 0
+                        && `${pending.filter((q) => q.workstream === w.id).length} waiting · `}
                       {merged}·{list.length}
                     </span>
                   </div>
@@ -946,6 +1046,19 @@ function MainApp() {
                   </div>
                 );
               })()}
+              {pending.filter((q) => q.workstream === current.id).map((q) => (
+                <section className="block" key={q.id}>
+                  <ProposalReview
+                    proposal={{ ...q, willQueue: false }}
+                    workstream={current}
+                    heading={`Waiting on you · from ${q.author}`}
+                    approveLabel="approve & merge"
+                    rejectLabel="reject"
+                    onApprove={() => approveQueuedItem(q.id)}
+                    onReject={() => rejectQueuedItem(q.id)}
+                  />
+                </section>
+              ))}
               {pendingProposal && pendingProposal.workstreamId === current.id ? (
                 <section className="block">
                   <ProposalReview
@@ -999,6 +1112,14 @@ function MainApp() {
                     onExplain={handleExplain}
                   />
                 )}
+              </section>
+              <section className="block">
+                <h4 className="section-title">Tasks</h4>
+                <TaskList
+                  tasks={tasks.filter((t) => t.workstream === current.id)}
+                  me={me}
+                  onToggle={toggleTask}
+                />
               </section>
               <section className="block">
                 <h4 className="section-title">Contribution log</h4>

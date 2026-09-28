@@ -1,13 +1,15 @@
-import { readConfig, readTree, readContributions, appendContribution } from '../storage.js';
+import { readConfig, readTree, readContributions, appendContribution, listTasks } from '../storage.js';
 import { commitContext } from '../git.js';
 import { runWithActor } from '../actor.js';
 import { contributeCore } from '../../cli/commands/contribute.core.js';
 import { needsReview } from '../review-policy.js';
 import { listAllWorkstreams } from '../../cli/commands/workstream.core.js';
 import { listMembers } from '../../cli/commands/member.core.js';
+import { listPendingReviews, approveReview, rejectReview } from '../../cli/commands/review.core.js';
+import { setTaskStatus, getTask } from '../../cli/commands/task.core.js';
 import { inScope } from '../member-scope.js';
 import { PROJECT_LEVEL, isProjectLevel, resolveTarget } from '../project-level.js';
-import { openProject } from './project-view.js';
+import { openProject, ProjectViewError } from './project-view.js';
 
 /**
  * What the project workspace boots on.
@@ -96,7 +98,35 @@ export async function readWorkspace({ owner, repo, user }) {
       if (contributions[key]) contributions[key].push(c);
     }
 
+    // Tasks are the half of a project the old interface had no concept of, and
+    // the half a member opens the web for: what is mine, and is it done.
+    const tasks = listTasks({}, undefined)
+      .filter(t => inScope(allowed, resolveTarget(t.workstream)))
+      .map(t => ({
+        id: t.id,
+        title: t.title,
+        owner: t.owner || null,
+        status: t.status === 'done' ? 'done' : 'open',
+        workstream: toKey(resolveTarget(t.workstream)),
+        doneAt: t.doneAt || null,
+      }));
+
+    // The queue is the manager's to clear, so only they are sent what is in it.
+    const pending = isManager
+      ? (await listPendingReviews({})).map(q => ({
+        id: q.id,
+        author: q.author,
+        summary: q.summary,
+        operations: q.operations || [],
+        text: q.text || '',
+        createdAt: q.createdAt || null,
+        workstream: toKey(resolveTarget(q.workstream)),
+      }))
+      : [];
+
     return {
+      tasks,
+      pending,
       me: {
         name: actor.name || actor.email || 'you',
         role: roleFor(config, actor, isManager),
@@ -196,5 +226,78 @@ export async function discardContribution({ owner, repo, user, workstream, text 
     appendContribution(contribution);
     await commitContext(`log: ${contribution.author} contribution (not applied)\n\nSource: web`);
     return { id: contribution.id, contribution };
+  }));
+}
+
+/**
+ * Clearing the queue, from the same card that proposed the change.
+ *
+ * Both of these are manager-gated where they are implemented, not here: the
+ * gate reads the identity teamctx resolved, and a caller who is not the manager
+ * is refused whether they arrived from the terminal, an assistant or this page.
+ */
+export async function approveQueued({ owner, repo, user, id }) {
+  return openProject({ owner, repo, user }, async ({ actor }) => runWithActor(actor, async () => {
+    const r = await approveReview({ id });
+    return {
+      id: r.id,
+      workstream: toKey(r.workstream),
+      tree: readTree(r.workstream),
+      pending: (await listPendingReviews({})).map(q => ({
+        id: q.id,
+        author: q.author,
+        summary: q.summary,
+        operations: q.operations || [],
+        text: q.text || '',
+        createdAt: q.createdAt || null,
+        workstream: toKey(resolveTarget(q.workstream)),
+      })),
+    };
+  }));
+}
+
+export async function rejectQueued({ owner, repo, user, id, reason }) {
+  return openProject({ owner, repo, user }, async ({ actor }) => runWithActor(actor, async () => {
+    await rejectReview({ id, reason: reason || 'rejected from the workspace' });
+    return {
+      id,
+      pending: (await listPendingReviews({})).map(q => ({
+        id: q.id,
+        author: q.author,
+        summary: q.summary,
+        operations: q.operations || [],
+        text: q.text || '',
+        createdAt: q.createdAt || null,
+        workstream: toKey(resolveTarget(q.workstream)),
+      })),
+    };
+  }));
+}
+
+/**
+ * Marking a task done, or opening it again.
+ *
+ * Anybody on the project may: a task is work somebody is doing, and asking a
+ * manager to tick it off is how a board stops being believed.
+ */
+export async function markTask({ owner, repo, user, id, status }) {
+  return openProject({ owner, repo, user }, async ({ actor, allowed }) => runWithActor(actor, async () => {
+    // Checked before it is written, not after: `setTaskStatus` commits, so a
+    // refusal that came later would have already changed the repository.
+    const existing = getTask({ id });
+    if (!inScope(allowed, resolveTarget(existing.workstream))) {
+      throw new ProjectViewError('That task is not in a part of the work you are on.');
+    }
+    const { task } = await setTaskStatus({ id, status: status === 'done' ? 'done' : 'open' });
+    return {
+      task: {
+        id: task.id,
+        title: task.title,
+        owner: task.owner || null,
+        status: task.status === 'done' ? 'done' : 'open',
+        workstream: toKey(resolveTarget(task.workstream)),
+        doneAt: task.doneAt || null,
+      },
+    };
   }));
 }

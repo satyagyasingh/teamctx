@@ -1,8 +1,10 @@
 import { currentUser } from '../../../src/oauth/session.js';
 import {
   readWorkspace, proposeContribution, applyContribution, discardContribution,
+  approveQueued, rejectQueued, markTask,
 } from '../../../src/oauth/workspace.js';
 import { ProjectViewError } from '../../../src/oauth/project-view.js';
+import { ManagerGateError } from '../../../cli/commands/review.core.js';
 
 /**
  * The JSON the project workspace reads and writes through.
@@ -42,6 +44,21 @@ const ACTIONS = {
     });
   },
 
+  async approve({ owner, repo, user, body }) {
+    if (!body?.id) throw new BadRequest('Which one?');
+    return approveQueued({ owner, repo, user, id: String(body.id) });
+  },
+
+  async reject({ owner, repo, user, body }) {
+    if (!body?.id) throw new BadRequest('Which one?');
+    return rejectQueued({ owner, repo, user, id: String(body.id), reason: body.reason });
+  },
+
+  async task({ owner, repo, user, body }) {
+    if (!body?.id) throw new BadRequest('Which task?');
+    return markTask({ owner, repo, user, id: String(body.id), status: body.status });
+  },
+
   async discard({ owner, repo, user, body }) {
     return discardContribution({
       owner, repo, user, workstream: body?.workstream, text: String(body?.text || ''),
@@ -74,8 +91,9 @@ export default async function handler(req, res) {
   } catch (e) {
     if (e instanceof BadRequest) return res.status(400).json({ error: e.message });
     // The manager gate and the roster both refuse by throwing. Neither is a
-    // fault in the request, so neither is reported as one.
-    if (e.name === 'ManagerGateError') return res.status(403).json({ error: e.message });
+    // fault in the request, so neither is reported as one — and neither is a
+    // fault in the server, which is what a 500 would have said.
+    if (e instanceof ManagerGateError) return res.status(403).json({ error: e.message });
     if (e instanceof ProjectViewError) return res.status(403).json({ error: e.message });
     res.status(500).json({ error: e.message || String(e) });
   }
