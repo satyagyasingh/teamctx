@@ -18,6 +18,7 @@ import { GithubSession, listUserOrgs, createRepo, slugifyProjectName, suggestAva
 import { runWithSession } from '../src/session-context.js';
 import { initProject } from '../cli/commands/init.core.js';
 import { readProjectView, ProjectViewError } from '../src/oauth/project-view.js';
+import { currentUser, readSessionId } from '../src/oauth/session.js';
 import { addAgent, removeAgent, MemberNotFoundError } from '../cli/commands/member.core.js';
 import {
   createAgentToken, listAgents, revokeAgent, projectsWithAgentsBy,
@@ -306,18 +307,6 @@ async function loginViaGithub(code, baseUrl) {
 }
 
 // ---- Settings page: set the AI provider key --------------------------
-
-function readSessionId(req) {
-  const cookie = req.headers.cookie || '';
-  const match = cookie.match(/(?:^|;\s*)teamctx_sid=([^;]+)/);
-  return match ? match[1] : null;
-}
-
-async function currentUser(req) {
-  const sid = readSessionId(req);
-  if (!sid) return null;
-  return await kvGet(keys.session(sid));
-}
 
 app.get('/settings', async (req, res) => {
   const user = await currentUser(req);

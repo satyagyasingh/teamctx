@@ -77,7 +77,19 @@ function membersOn(members, id) {
   return members.filter(m => !m.workstreams?.length || m.workstreams.includes(id));
 }
 
-export async function readProjectView({ owner, repo, user }) {
+/**
+ * Open a project for somebody, and hand the caller what it decided.
+ *
+ * Everything that reads a project on the web goes through here: the credential
+ * it is read with, whether the caller manages it, whether the roster lets them
+ * in at all, and which parts of the work they can see. Written once because a
+ * second reader with its own copy of these four answers is a second reader that
+ * can disagree with the first about who may see what.
+ *
+ * The body runs inside the session, so `readConfig`, `readTree` and the rest
+ * hit the repository buffer rather than a disk that is not there.
+ */
+export async function openProject({ owner, repo, user }, body) {
   const { ghToken, actor, checkRoster } = await accessFor({ owner, repo, user });
   const session = new GithubSession({ owner, repo, ghToken });
   try {
@@ -102,7 +114,12 @@ export async function readProjectView({ owner, repo, user }) {
         + 'Ask the manager to add that exact address, or sign in with the one they invited.');
     }
     const allowed = scopeFor(config, actor, { isManager });
+    return body({ config, actor, isManager, allowed, session, owner, repo });
+  });
+}
 
+export async function readProjectView({ owner, repo, user }) {
+  return openProject({ owner, repo, user }, async ({ config, isManager, allowed }) => {
     const members = listMembers({}).filter(m => m.kind !== 'agent');
     const agents = listMembers({}).filter(m => m.kind === 'agent');
     const workstreams = (await listAllWorkstreams({}))
