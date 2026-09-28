@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadKey, saveKey } from "./storage.js";
 import { applyOps } from "./ops.js";
 import {
   DEFAULT_ASK_MODEL,
@@ -8,116 +7,7 @@ import {
   askLane,
   proposeDiff,
 } from "./ai.js";
-import {
-  StalenessError,
-  loadProjectConfig,
-  loadSharedTree,
-  loadContributions,
-  checkSharedTreeSha,
-  writeSharedTree,
-  appendContribution,
-} from "./github.js";
-
-function uid() {
-  return Math.random().toString(36).slice(2, 10);
-}
-
-function useDebouncedSave(key, value, ready, enabled = true) {
-  const timer = useRef(null);
-  useEffect(() => {
-    if (!ready || !enabled) return;
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      saveKey(key, value, false);
-    }, 300);
-    return () => timer.current && clearTimeout(timer.current);
-  }, [key, value, ready, enabled]);
-}
-
-function MeNamePrompt({ onSubmit, roles = null, initialName = "", adminName = "", prefillRole = "" }) {
-  const [name, setName] = useState(initialName);
-  const requireRole = Array.isArray(roles);
-  const matchedPrefill =
-    requireRole && prefillRole && roles.some((r) => r.slug === prefillRole)
-      ? prefillRole
-      : "";
-  const isAdminMatch =
-    !matchedPrefill &&
-    !!adminName &&
-    name.trim().toLowerCase() === adminName.trim().toLowerCase();
-  const [pickedRole, setPickedRole] = useState(
-    requireRole ? roles[0]?.slug || "" : "",
-  );
-  const effectiveRole =
-    matchedPrefill || (isAdminMatch ? "admin" : pickedRole);
-  const valid = name.trim() && (!requireRole || effectiveRole);
-  function submit() {
-    if (!valid) return;
-    onSubmit(requireRole ? { name: name.trim(), role: effectiveRole } : name.trim());
-  }
-  const prefillLabel =
-    matchedPrefill && roles.find((r) => r.slug === matchedPrefill)?.name;
-  return (
-    <div className="modal-backdrop">
-      <div className="modal">
-        <h3>{initialName && !matchedPrefill ? "Pick your role" : "Welcome — sign in"}</h3>
-        <p style={{ margin: "0 0 12px", color: "var(--soft)", fontSize: 13 }}>
-          {matchedPrefill
-            ? <>You've been invited as <strong>{prefillLabel}</strong>.</>
-            : initialName
-            ? "This workspace requires a role. Pick yours to continue."
-            : "Used to label contributions you make."}
-        </p>
-        {(!initialName || matchedPrefill) && (
-          <input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && valid) submit(); }}
-            placeholder="Your name (e.g. Shikhin)"
-            style={{ marginBottom: requireRole && !isAdminMatch && !matchedPrefill ? 10 : 0 }}
-          />
-        )}
-        {requireRole && !isAdminMatch && !matchedPrefill && (
-          <select
-            autoFocus={!!initialName}
-            value={pickedRole}
-            onChange={(e) => setPickedRole(e.target.value)}
-            style={{ width: "100%", padding: "8px 10px" }}
-          >
-            {roles.map((r) => (
-              <option key={r.slug} value={r.slug}>{r.name}</option>
-            ))}
-          </select>
-        )}
-        {requireRole && isAdminMatch && (
-          <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--accent)" }}>
-            ✓ Recognized as workspace admin — no role pick needed.
-          </p>
-        )}
-        <div className="modal-actions">
-          <button className="primary" disabled={!valid} onClick={submit}>
-            Continue
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NoRolesScreen() {
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div className="modal" style={{ textAlign: "center" }}>
-        <h3>No roles defined</h3>
-        <p style={{ color: "var(--soft)", fontSize: 13, margin: 0 }}>
-          This workspace has no roles yet. Ask the admin to add one with{" "}
-          <code>teamctx role new &lt;slug&gt;</code>.
-        </p>
-      </div>
-    </div>
-  );
-}
+import { SignedOutError, loadWorkspace, projectFromPath } from "./api.js";
 
 function AddLaneModal({ onCancel, onAdd }) {
   const [name, setName] = useState("");
@@ -484,31 +374,6 @@ function ContributionLog({ items }) {
   );
 }
 
-function ResetButton({ onReset }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const t = setTimeout(() => setArmed(false), 3000);
-    return () => clearTimeout(t);
-  }, [armed]);
-
-  return (
-    <button
-      className={armed ? "danger" : "ghost"}
-      onClick={() => {
-        if (armed) {
-          onReset();
-          setArmed(false);
-        } else {
-          setArmed(true);
-        }
-      }}
-    >
-      {armed ? "tap again to confirm" : "reset data"}
-    </button>
-  );
-}
-
 const SOURCE_CHIP_FROM_TAG = {
   human: "human",
   "human+AI": "human-ai",
@@ -708,15 +573,11 @@ function MainApp() {
   const [ready, setReady] = useState(false);
   const [githubMode, setGithubMode] = useState(false);
   const [githubConfig, setGithubConfig] = useState(null);
-  const [githubSha, setGithubSha] = useState(null);
   const [stalenessAlert, setStalenessAlert] = useState(false);
 
-  function addWorkstream(name) {
-    const ws = { id: uid(), name, whys: [] };
-    setWorkstreams((prev) => [...prev, ws]);
-    setContributions((prev) => ({ ...prev, [ws.id]: [] }));
-    setSelectedId(ws.id);
+  function addWorkstream() {
     setShowAddLane(false);
+    setError("Adding a part of the work from the workspace is not wired up yet.");
   }
 
   const [busy, setBusy] = useState(null); // { workstreamId, kind: "propose" | "ask" } | null
@@ -728,130 +589,16 @@ function MainApp() {
   const [distillModel, setDistillModel] = useState(DEFAULT_DISTILL_MODEL);
   const [askModel, setAskModel] = useState(DEFAULT_ASK_MODEL);
 
-  function logContribution({ wsId, text, source }) {
-    const c = {
-      id: uid(),
-      ts: Date.now(),
-      author: me,
-      source,
-      text,
-      status: "logged",
-    };
-    setContributions((prev) => ({
-      ...prev,
-      [wsId]: [...(prev[wsId] || []), c],
-    }));
-    return c;
-  }
-
-  async function handleContribute({ text, source }) {
-    if (!current) return;
-    setError("");
-
-    if (githubMode) {
-      try {
-        const currentSha = await checkSharedTreeSha();
-        if (currentSha !== githubSha) {
-          const [{ workstream: ws, sha }, { contributions: cs }] = await Promise.all([
-            loadSharedTree(),
-            loadContributions(),
-          ]);
-          setWorkstreams([ws]);
-          setSelectedId(ws.id);
-          setGithubSha(sha);
-          setContributions({ [ws.id]: cs });
-          setStalenessAlert(true);
-          return;
-        }
-      } catch (err) {
-        setError(`Staleness check failed: ${err.message}`);
-        return;
-      }
-    }
-
-    const logged = logContribution({ wsId: current.id, text, source });
-    setBusy({ workstreamId: current.id, kind: "propose" });
-    try {
-      const proposal = await proposeDiff({
-        workstream: current,
-        contribution: text,
-        source,
-        model: distillModel,
-      });
-      setPendingProposal({
-        workstreamId: current.id,
-        contributionId: logged.id,
-        summary: proposal.summary,
-        operations: proposal.operations,
-      });
-    } catch (err) {
-      setError(err.message || String(err));
-    } finally {
-      setBusy(null);
-    }
+  // Contributing runs teamctx's own path — the review policy decides whether it
+  // lands or queues, provenance is recorded, role files are regenerated — so it
+  // is a call to the server, not a file written from here. Wired in the step
+  // that adds it; the box below is live, its button is not.
+  async function handleContribute() {
+    setError("Contributing from the workspace is not wired up yet.");
   }
 
   async function approveProposal() {
-    if (!pendingProposal) return;
-    const { workstreamId, contributionId, operations } = pendingProposal;
-
-    if (githubMode) {
-      setBusy({ workstreamId, kind: "propose" });
-      try {
-        const base = workstreams.find((w) => w.id === workstreamId);
-        const newWorkstream = applyOps(base, operations, contributionId);
-
-        const { sha: newSha } = await writeSharedTree(newWorkstream, githubSha);
-        setGithubSha(newSha);
-
-        const entry = (contributions[workstreamId] || []).find(
-          (c) => c.id === contributionId,
-        );
-        if (entry) await appendContribution({ ...entry, status: "merged" });
-
-        setWorkstreams((prev) =>
-          prev.map((w) => (w.id === workstreamId ? newWorkstream : w)),
-        );
-        setContributions((prev) => ({
-          ...prev,
-          [workstreamId]: (prev[workstreamId] || []).map((c) =>
-            c.id === contributionId ? { ...c, status: "merged" } : c,
-          ),
-        }));
-        setPendingProposal(null);
-      } catch (err) {
-        if (err instanceof StalenessError) {
-          setPendingProposal(null);
-          const [{ workstream: ws, sha }, { contributions: cs }] = await Promise.all([
-            loadSharedTree(),
-            loadContributions(),
-          ]);
-          setWorkstreams([ws]);
-          setSelectedId(ws.id);
-          setGithubSha(sha);
-          setContributions({ [ws.id]: cs });
-          setStalenessAlert(true);
-        } else {
-          setError(err.message || String(err));
-        }
-      } finally {
-        setBusy(null);
-      }
-      return;
-    }
-
-    setWorkstreams((prev) =>
-      prev.map((w) =>
-        w.id === workstreamId ? applyOps(w, operations, contributionId) : w,
-      ),
-    );
-    setContributions((prev) => ({
-      ...prev,
-      [workstreamId]: (prev[workstreamId] || []).map((c) =>
-        c.id === contributionId ? { ...c, status: "merged" } : c,
-      ),
-    }));
-    setPendingProposal(null);
+    setError("Approving from the workspace is not wired up yet.");
   }
 
   function rejectProposal() {
@@ -899,85 +646,43 @@ function MainApp() {
     setAskOpen(true);
   }
 
-  function resetAll() {
-    saveKey("tc.v2:workstreams", [], false);
-    saveKey("tc.v2:contributions", {}, false);
-    setWorkstreams([]);
-    setContributions({});
-    setSelectedId(null);
-    setPendingProposal(null);
-    setAnswer("");
-    setError("");
-    setAskInput("");
-    setAskQuoted("");
-    setAskOpen(false);
-    setViewMode("column");
-    // me stays — don't re-prompt for name on reset
-  }
-
+  // The project in the address bar, and everything the person may see of it.
+  //
+  // What this replaces asked the visitor for a name, let them pick their own
+  // role from a dropdown, and kept both in localStorage. The server answers all
+  // three questions now — who you are, what your role is, what you are allowed
+  // to read — because only it can answer them truthfully.
   useEffect(() => {
     (async () => {
-      let isGithubMode = false;
-      try {
-        const config = await loadProjectConfig();
-        setGithubConfig(config);
-        setGithubMode(true);
-        isGithubMode = true;
-      } catch (err) {
-        if (err.status !== 404) console.warn("GitHub mode check:", err.message);
-      }
-
-      if (isGithubMode) {
-        try {
-          const [{ workstream, sha }, { contributions: cs }, name, role] = await Promise.all([
-            loadSharedTree(),
-            loadContributions(),
-            loadKey("tc.v2:me", false, ""),
-            loadKey("tc.v2:myRole", false, ""),
-          ]);
-          setWorkstreams([workstream]);
-          setSelectedId(workstream.id);
-          setGithubSha(sha);
-          setContributions({ [workstream.id]: cs });
-          setMe(name);
-          setMyRole(role);
-        } catch (err) {
-          setError(`Failed to load project: ${err.message}`);
-        }
+      const project = projectFromPath();
+      if (!project) {
+        setError("No project in this address.");
         setReady(true);
         return;
       }
-
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("seed") === "statslateral") {
-        const { SEED_WORKSTREAMS, SEED_CONTRIBUTIONS } = await import(
-          "./seeds/statslateral.js"
-        );
-        const existingName = await loadKey("tc.v2:me", false, "");
-        await Promise.all([
-          saveKey("tc.v2:workstreams", SEED_WORKSTREAMS, false),
-          saveKey("tc.v2:contributions", SEED_CONTRIBUTIONS, false),
-          ...(existingName ? [] : [saveKey("tc.v2:me", "Shikhin", false)]),
-        ]);
-        history.replaceState(null, "", window.location.pathname);
+      try {
+        const data = await loadWorkspace(project);
+        setGithubConfig({ name: `${data.project.owner}/${data.project.repo}`, roles: data.roles });
+        setGithubMode(true);
+        setWorkstreams(data.workstreams);
+        setContributions(data.contributions);
+        setSelectedId(data.workstreams[0]?.id ?? null);
+        setMe(data.me.name);
+        setMyRole(data.me.role || (data.me.isManager ? "admin" : ""));
+      } catch (err) {
+        if (err instanceof SignedOutError) {
+          window.location.href = err.signIn;
+          return;
+        }
+        setError(err.message || String(err));
       }
-      const [ws, contribs, name] = await Promise.all([
-        loadKey("tc.v2:workstreams", false, []),
-        loadKey("tc.v2:contributions", false, {}),
-        loadKey("tc.v2:me", false, ""),
-      ]);
-      setWorkstreams(ws);
-      setContributions(contribs);
-      setMe(name);
-      setSelectedId(ws[0]?.id ?? null);
       setReady(true);
     })();
   }, []);
 
-  useDebouncedSave("tc.v2:workstreams", workstreams, ready, !githubMode);
-  useDebouncedSave("tc.v2:contributions", contributions, ready, !githubMode);
-  useDebouncedSave("tc.v2:me", me, ready);
-  useDebouncedSave("tc.v2:myRole", myRole, ready);
+  // Nothing here is saved in the browser. The tree lives in the repository and
+  // the person is whoever the session says, so a local copy of either could only
+  // ever be a stale second opinion.
 
   useEffect(() => {
     roleDecisionsRef.current = "";
@@ -1021,12 +726,6 @@ function MainApp() {
       ? githubConfig?.roles?.find((r) => r.slug === myRole)?.details || ""
       : "";
 
-  useEffect(() => {
-    if (ready && me && myRole && window.location.pathname !== "/") {
-      history.replaceState(null, "", "/");
-    }
-  }, [ready, me, myRole]);
-
   const current = useMemo(
     () => workstreams.find((w) => w.id === selectedId) || null,
     [workstreams, selectedId],
@@ -1036,44 +735,15 @@ function MainApp() {
     return <div style={{ padding: 40, color: "var(--soft)" }}>Loading…</div>;
   }
 
-  if (githubMode) {
-    const roles = githubConfig?.roles || [];
-    if (roles.length === 0) return <NoRolesScreen />;
-    const adminName = githubConfig?.me || "";
-    const urlSlug = window.location.pathname.replace(/^\/+|\/+$/g, "");
-    const prefillRole = roles.some((r) => r.slug === urlSlug) ? urlSlug : "";
-    function clearUrlSlug() {
-      if (window.location.pathname !== "/") {
-        history.replaceState(null, "", "/");
-      }
-    }
-    if (!me) {
-      return (
-        <MeNamePrompt
-          roles={roles}
-          adminName={adminName}
-          prefillRole={prefillRole}
-          onSubmit={({ name, role }) => {
-            setMe(name);
-            setMyRole(role);
-            clearUrlSlug();
-          }}
-        />
-      );
-    }
-    if (!myRole) {
-      return (
-        <MeNamePrompt
-          roles={roles}
-          adminName={adminName}
-          initialName={me}
-          prefillRole={prefillRole}
-          onSubmit={({ role }) => { setMyRole(role); clearUrlSlug(); }}
-        />
-      );
-    }
-  } else if (!me) {
-    return <MeNamePrompt onSubmit={(n) => setMe(n)} />;
+  if (error && !workstreams.length) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div className="modal" style={{ textAlign: "center" }}>
+          <h3>This project could not be opened</h3>
+          <p style={{ color: "var(--soft)", fontSize: 13, margin: 0 }}>{error}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1086,9 +756,7 @@ function MainApp() {
           Team Context <span className="dim">— shared distillation</span>
         </h1>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {githubMode && githubConfig && (
-            <GithubModeChip repo={githubConfig.name} />
-          )}
+          {githubConfig && <GithubModeChip repo={githubConfig.name} />}
           {current && (
             <button className="primary ask-header-btn" onClick={openAskEmpty}>
               Ask
@@ -1140,13 +808,13 @@ function MainApp() {
                       ))}
                     </div>
                   )}
-                  {w.id === selectedId && githubMode && myRole && myRole !== "admin" && (
+                  {w.id === selectedId && myRole && myRole !== "admin" && (
                     <ContextCopyRow onOpen={() => setShowContextDrawer(true)} />
                   )}
                 </div>
               );
             })}
-            {!githubMode && (
+            {myRole === "admin" && (
               <button className="add-ws ghost" onClick={() => setShowAddLane(true)}>
                 + add workstream
               </button>
@@ -1180,13 +848,10 @@ function MainApp() {
             <div className="sidebar-footer-row">
               <span className="sidebar-me">
                 signed in as {me}
-                {githubMode && myRole === "admin" && (
-                  <span className="admin-tag"> · Admin</span>
-                )}
+                {myRole === "admin" && <span className="admin-tag"> · Manager</span>}
               </span>
-              {!githubMode && <ResetButton onReset={resetAll} />}
             </div>
-            {githubMode && myRole && myRole !== "admin" && (
+            {myRole && myRole !== "admin" && (
               <button
                 className="ghost role-link"
                 onClick={() => setShowRoleModal(true)}
@@ -1307,7 +972,7 @@ function MainApp() {
         onClose={() => setShowRoleModal(false)}
       />
       <ContextDrawer
-        open={showContextDrawer && githubMode && !!myRole && myRole !== "admin"}
+        open={showContextDrawer && !!myRole && myRole !== "admin"}
         roleLabel={
           githubConfig?.roles?.find((r) => r.slug === myRole)?.name || myRole
         }

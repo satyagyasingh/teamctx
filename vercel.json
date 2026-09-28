@@ -19,7 +19,7 @@
     { "source": "/oauth/:path*", "destination": "/api/oauth-server" },
     { "source": "/signin", "destination": "/api/oauth-server" },
     { "source": "/projects", "destination": "/api/oauth-server" },
-    { "source": "/project/:path*", "destination": "/api/oauth-server" },
+    { "source": "/project/:path*", "destination": "/app/index.html" },
     { "source": "/settings", "destination": "/api/oauth-server" },
     { "source": "/settings/:path*", "destination": "/api/oauth-server" }
   ]

@@ -1,6 +1,10 @@
 import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  // The workspace is JSX. Everything else in here is plain node code the plugin
+  // never touches, so one config still runs both.
+  plugins: [react()],
   test: {
     environment: 'node',
     globals: true,
