@@ -47,11 +47,12 @@ beforeEach(() => __resetMemory());
 
 describe('every door leads to the same screen', () => {
   // The paths somebody signed out can arrive on, and where each says to go.
+  // The workspace serves `/projects` and `/project/<owner>/<repo>` as static
+  // files now, so its doors are the API calls it makes on arrival — those are
+  // checked where they live, in api/projects.test.js and api/workspace-api.test.js.
   const doors = [
     ['/settings', '/signin?returnTo=/settings'],
     ['/settings/new-project', '/signin?returnTo=/settings/new-project'],
-    ['/projects', '/signin?returnTo=/projects'],
-    ['/project/acme/ledger', '/signin?returnTo=/project/acme/ledger'],
   ];
 
   for (const [path, expected] of doors) {

@@ -21,7 +21,7 @@ const destinationOf = (path) => config.rewrites.find(r => {
 })?.destination;
 
 describe('what still reaches the server', () => {
-  for (const path of ['/', '/signin', '/settings', '/settings/new-project', '/projects',
+  for (const path of ['/', '/signin', '/settings', '/settings/new-project',
                       '/oauth/choose', '/authorize', '/token']) {
     it(`${path} is rendered by the server`, () => {
       expect(destinationOf(path)).toBe('/api/oauth-server');
@@ -30,6 +30,10 @@ describe('what still reaches the server', () => {
 });
 
 describe('what the workspace bundle answers', () => {
+  it('serves the project list from the built app', () => {
+    expect(destinationOf('/projects')).toBe('/app/index.html');
+  });
+
   it('serves a project page from the built app', () => {
     expect(destinationOf('/project/acme/ledger')).toBe('/app/index.html');
   });
@@ -52,5 +56,9 @@ describe('what is left alone', () => {
 
   it('does not rewrite the connector endpoint', () => {
     expect(destinationOf('/api/mcp/acme/ledger')).toBe(undefined);
+  });
+
+  it('leaves the project list API to its own function', () => {
+    expect(destinationOf('/api/projects')).toBe(undefined);
   });
 });

@@ -17,6 +17,7 @@ import {
   approveQueued,
   rejectQueued,
   markTask,
+  loadProjects,
 } from "./api.js";
 
 function AddLaneModal({ onCancel, onAdd }) {
@@ -919,7 +920,9 @@ function MainApp() {
       )}
       <header className="top">
         <h1>
-          Team Context <span className="dim">— shared distillation</span>
+          <a href="/projects" style={{ textDecoration: "none", color: "inherit" }}>
+            ← All projects
+          </a>
         </h1>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {githubConfig && <GithubModeChip repo={githubConfig.name} />}
@@ -1684,6 +1687,75 @@ function RolePage({ slug }) {
   );
 }
 
+// ── ProjectsPage ──────────────────────────────────────────────────────────────
+// The standalone app was one deployment pointed at one repository, so it never
+// drew a list of projects. This is the sidebar's own row, lifted into a column:
+// nothing invented, and the row somebody clicks is the row they land beside.
+
+function ProjectsPage() {
+  const [state, setState] = useState({ loading: true, projects: [], me: null, error: "" });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await loadProjects();
+        setState({ loading: false, projects: data.projects, me: data.me, error: "" });
+      } catch (err) {
+        if (err instanceof SignedOutError) {
+          window.location.href = err.signIn;
+          return;
+        }
+        setState({ loading: false, projects: [], me: null, error: err.message || String(err) });
+      }
+    })();
+  }, []);
+
+  if (state.loading) {
+    return <div style={{ padding: 40, color: "var(--soft)" }}>Loading…</div>;
+  }
+
+  return (
+    <div className="app">
+      <header className="top">
+        <h1>
+          Your projects <span className="dim">— what you can open</span>
+        </h1>
+        {state.me && <span className="sidebar-me">signed in as {state.me.name}</span>}
+      </header>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "8px 20px 40px", width: "100%" }}>
+        {state.error && <div className="error">Error: {state.error}</div>}
+        <section className="card">
+          {state.projects.length === 0 && !state.error ? (
+            <div className="empty-state">
+              Nothing here yet. A project appears once you connect an assistant to it,
+              add a key to it, or lend it access.
+            </div>
+          ) : (
+            <div className="sidebar-list">
+              {state.projects.map((p) => (
+                <a
+                  key={p.slug}
+                  className="ws-item"
+                  href={`/project/${p.owner}/${p.repo}`}
+                  style={{ display: "block", textDecoration: "none", color: "inherit" }}
+                >
+                  <div className="ws-item-row">
+                    <span>{p.repo}</span>
+                    <span className="counts">{p.owner}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+        <p className="muted" style={{ marginTop: 16 }}>
+          Keys, access and agents are set per project, from <a href="/settings">settings</a>.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Top-level router ──────────────────────────────────────────────────────────
 
 function usePathname() {
@@ -1698,8 +1770,9 @@ function usePathname() {
 
 export default function App() {
   const pathname = usePathname();
-  const match = pathname.match(/^\/context\/([^/]+)$/);
-  if (match) return <RolePage slug={match[1]} />;
+  if (pathname === "/projects") return <ProjectsPage />;
+  const role = pathname.match(/^\/project\/[^/]+\/[^/]+\/role\/([^/]+)$/);
+  if (role) return <RolePage slug={role[1]} />;
   return <MainApp />;
 }
 

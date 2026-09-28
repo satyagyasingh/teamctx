@@ -62,3 +62,17 @@ export const rejectQueued = ({ owner, repo, id, reason }) =>
 
 export const markTask = ({ owner, repo, id, status }) =>
   call({ owner, repo, action: 'task', body: { id, status } });
+
+/**
+ * The projects somebody can open.
+ *
+ * The app this came from was one deployment pointed at one repository, so it
+ * never drew this screen — there was nothing to choose between.
+ */
+export async function loadProjects() {
+  const res = await fetch('/api/projects');
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new SignedOutError(data.signIn || '/signin');
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}

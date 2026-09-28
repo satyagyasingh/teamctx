@@ -191,6 +191,36 @@ describe('what a member is allowed to boot on', () => {
   });
 });
 
+describe('who counts as the manager', () => {
+  // These rules were pinned by the read-only page this workspace replaces. The
+  // page is gone; the rules are not, so neither are its tests.
+
+  it('is nobody, on a project with no gate — the roster still decides', async () => {
+    // `canApprove` answers yes to everyone where no gate is pinned. Used here,
+    // that let any Google account read any project that lends access.
+    repo.files.set('.teamctx/config.json', JSON.stringify({ ...CONFIG, managerKey: undefined, members: [] }));
+    await lend();
+    const { status, body } = await call({ session: { ...MEMBER, email: 'stranger@example.com' } });
+    expect(status).toBe(403);
+    expect(body.error).toMatch(/not on the acme\/ledger roster/);
+  });
+
+  it('is not somebody who named themselves after a legacy display-name gate', async () => {
+    repo.files.set('.teamctx/config.json', JSON.stringify({
+      ...CONFIG, managerKey: undefined, manager: 'Maya', members: [],
+    }));
+    await lend();
+    const { status } = await call({ session: { ...MEMBER, name: 'Maya', email: 'stranger@example.com' } });
+    expect(status).toBe(403);
+  });
+
+  it('is the address on the gate, however they signed in', async () => {
+    await lend();
+    const { body } = await call({ session: { ...MEMBER, name: 'Maya', email: 'maya@example.com' } });
+    expect(body.me.isManager).toBe(true);
+  });
+});
+
 describe('the door', () => {
   it('sends a signed-out caller to the sign-in screen, and back again', async () => {
     const { status, body } = await call();

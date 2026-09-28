@@ -1,25 +1,18 @@
 import { GithubSession } from '../adapters/github.js';
 import { runWithSession } from '../session-context.js';
-import { readConfig, readProject, listTasks } from '../storage.js';
-import { listAllWorkstreams } from '../../cli/commands/workstream.core.js';
-import { listMembers, memberByEmail } from '../../cli/commands/member.core.js';
-import { listPendingReviews } from '../../cli/commands/review.core.js';
-import { scopeFor, inScope } from '../member-scope.js';
-import { resolveTarget, targetLabel } from '../project-level.js';
+import { readConfig } from '../storage.js';
+import { memberByEmail } from '../../cli/commands/member.core.js';
+import { scopeFor } from '../member-scope.js';
 import { managerKeys, matchesActor } from '../review.js';
 import { kvGet, keys } from './kv.js';
 
 /**
- * Where a project stands, for somebody who would rather look than ask.
+ * Opening a project on the web, for whoever asked to.
  *
- * Everything here is already in the repository; the only interface to it was a
- * conversation, which asks a non-technical manager to know what to ask for. So
- * this reads the same files the tools read and hands back the three answers
- * people actually want — what the parts of the work are and who is on them, what
- * is open and who has it, and what is waiting on the manager.
- *
- * Read-only, deliberately: approving and editing already have a place, and a
- * second way to write would be a second thing to keep honest.
+ * Everything the workspace shows is already in the repository. What this
+ * settles is who is asking, what they may see of it, and which credential it is
+ * read with — the answers every reader needs and none of them should decide for
+ * itself.
  */
 
 export class ProjectViewError extends Error {
@@ -72,11 +65,6 @@ async function accessFor({ owner, repo, user }) {
   };
 }
 
-/** Who is on each part of the work. A member with no workstreams is on all of them. */
-function membersOn(members, id) {
-  return members.filter(m => !m.workstreams?.length || m.workstreams.includes(id));
-}
-
 /**
  * Open a project for somebody, and hand the caller what it decided.
  *
@@ -117,56 +105,3 @@ export async function openProject({ owner, repo, user }, body) {
     return body({ config, actor, isManager, allowed, session, owner, repo });
   });
 }
-
-export async function readProjectView({ owner, repo, user }) {
-  return openProject({ owner, repo, user }, async ({ config, isManager, allowed }) => {
-    const members = listMembers({}).filter(m => m.kind !== 'agent');
-    const agents = listMembers({}).filter(m => m.kind === 'agent');
-    const workstreams = (await listAllWorkstreams({}))
-      .filter(w => inScope(allowed, w.id))
-      .map(w => ({ ...w, members: membersOn(members, w.id).map(m => m.name) }));
-
-    const tasks = listTasks({}, undefined)
-      .filter(t => inScope(allowed, resolveTarget(t.workstream)))
-      .map(t => ({
-        id: t.id,
-        title: t.title,
-        owner: t.owner || null,
-        status: t.status === 'done' ? 'done' : 'open',
-        where: targetLabel(resolveTarget(t.workstream), config.project),
-      }));
-
-    // The queue is the manager's to clear, so only they are shown what is in it.
-    const pending = isManager
-      ? (await listPendingReviews({})).map(q => ({
-        id: q.id,
-        author: q.author,
-        summary: q.summary,
-        createdAt: q.createdAt || null,
-        where: targetLabel(resolveTarget(q.workstream), config.project),
-      }))
-      : null;
-
-    return {
-      project: config.project,
-      owner,
-      repo,
-      isManager,
-      scopedTo: allowed,
-      projectWhys: (readProject().whys || []).length,
-      workstreams,
-      members: members.map(m => ({
-        name: m.name,
-        email: m.email || null,
-        on: m.workstreams?.length ? m.workstreams : null,
-      })),
-      agents: agents.map(a => ({ name: a.name, on: a.workstreams?.length ? a.workstreams : null })),
-      tasks: {
-        open: tasks.filter(t => t.status === 'open'),
-        done: tasks.filter(t => t.status === 'done'),
-      },
-      pending,
-    };
-  });
-}
-

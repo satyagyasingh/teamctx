@@ -18,7 +18,7 @@
     { "source": "/revoke", "destination": "/api/oauth-server" },
     { "source": "/oauth/:path*", "destination": "/api/oauth-server" },
     { "source": "/signin", "destination": "/api/oauth-server" },
-    { "source": "/projects", "destination": "/api/oauth-server" },
+    { "source": "/projects", "destination": "/app/index.html" },
     { "source": "/project/:path*", "destination": "/app/index.html" },
     { "source": "/settings", "destination": "/api/oauth-server" },
     { "source": "/settings/:path*", "destination": "/api/oauth-server" }
