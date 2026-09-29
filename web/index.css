@@ -617,7 +617,9 @@ section.block {
 }
 .op-card.add    { border-color: var(--accent);  background: var(--accent-soft); }
 .op-card.edit   { border-color: var(--amber);   background: var(--amber-soft); }
-.op-card.delete { border-color: #b91c1c;        background: #fde8e8; }
+/* Removing a statement is an ordinary edit, not an alarm. The old red read as
+   a warning about the change rather than a description of it. */
+.op-card.delete { border-color: #c2b8ae;        background: #f3eee7; }
 
 .op-card .op-badge {
   display: inline-block;
@@ -633,12 +635,17 @@ section.block {
 }
 .op-card.add    .op-badge { background: var(--accent); }
 .op-card.edit   .op-badge { background: var(--amber); }
-.op-card.delete .op-badge { background: #b91c1c; }
+.op-card.delete .op-badge { background: #8a7f73; }
 
 .op-card .op-text { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
 .op-card.delete .op-text { text-decoration: line-through; color: var(--soft); }
 
 .op-card .op-summary { font-size: 13px; color: var(--soft); }
+/* A change whose target is no longer in the context: approving it does nothing,
+   and saying so is better than printing the id it cannot find. */
+.op-card .op-gone { font-size: 13px; color: var(--faint); font-style: italic; margin-bottom: 4px; }
+/* Left out of an approval — still readable, plainly not being taken. */
+.op-card.unpicked { opacity: .55; }
 .op-card .op-parent {
   font-size: 12px;
   color: var(--faint);

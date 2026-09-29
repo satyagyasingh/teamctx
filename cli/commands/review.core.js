@@ -69,7 +69,7 @@ export async function listPendingReviews({ teamctxDir } = {}) {
   return listQueue(teamctxDir);
 }
 
-export async function approveReview({ id, teamctxDir, projectDir, actor } = {}) {
+export async function approveReview({ id, only = null, teamctxDir, projectDir, actor } = {}) {
   const config = readConfig(teamctxDir);
   // The gate reads the resolved identity, never the caller-supplied `actor`.
   // That argument is attribution only: it is a claim, not a credential.
@@ -81,12 +81,23 @@ export async function approveReview({ id, teamctxDir, projectDir, actor } = {}) 
   try { item = readQueueItem(id, teamctxDir); }
   catch { throw new QueueItemNotFoundError(id); }
 
+  // Approving part of what was sent.
+  //
+  // A contribution is one person's message, and the changes read out of it are
+  // not equally right — a manager who has to take all six or none will take all
+  // six. `only` is the indexes to keep; everything else is left behind with the
+  // rest of the item, which is closed either way, because the person is owed an
+  // answer rather than a queue that never empties.
+  const all = item.operations || [];
+  const operations = Array.isArray(only) ? all.filter((_, i) => only.includes(i)) : all;
+  const leftOut = all.length - operations.length;
+
   // `null` is the project itself. Defaulting to `main` here would have sent an
   // approved project-level contribution to a workstream that no longer exists.
   const targetId = resolveTarget(item.workstream);
   const { rolesRegenerated } = await landOperations({
     targetId,
-    operations: item.operations || [],
+    operations,
     contributionId: item.id,
     author: item.author,
     config,
@@ -97,12 +108,13 @@ export async function approveReview({ id, teamctxDir, projectDir, actor } = {}) 
 
   const note = item.tagged === 'decision' ? ' [decision]' : '';
   const wsNote = isProjectLevel(targetId) ? '' : ` (${targetId})`;
+  const partly = leftOut ? ` — ${operations.length} of ${all.length} changes` : '';
   const approvedBy = who;
   await commitContext(
     // This is the commit that actually changes shared context, so it is the one
     // someone reads when asking where a Why came from. The queue item carried
     // the source through review; without this it would be lost at the last step.
-    `context: ${item.author} contribution (approved by ${approvedBy})${note}${wsNote}${sourceTrailer(item.source)}`,
+    `context: ${item.author} contribution (approved by ${approvedBy})${partly}${note}${wsNote}${sourceTrailer(item.source)}`,
     projectDir ? { cwd: projectDir } : undefined,
   );
 
@@ -117,7 +129,8 @@ export async function approveReview({ id, teamctxDir, projectDir, actor } = {}) 
     workstream: targetId,
     author: item.author,
     approvedBy,
-    operations: item.operations || [],
+    operations,
+    leftOut,
     rolesRegenerated,
     pushed,
     pushError,

@@ -177,3 +177,72 @@ describe('contributing from the workspace', () => {
     expect(container.textContent).not.toContain('Proposed change');
   });
 });
+
+describe('the review queue on the page', () => {
+  const QUEUED = {
+    ...PAYLOAD,
+    pending: [
+      {
+        id: 'c-9',
+        author: 'Priya',
+        summary: 'records the pricing decision',
+        text: 'we settled on three tiers',
+        workstream: 'project',
+        operations: [
+          { type: 'addWhy', text: 'tiers decided' },
+          { type: 'deleteStatement', id: '4f329zt7', was: null, gone: true, summary: 'obsolete' },
+        ],
+      },
+      { id: 'c-8', author: 'Dev', summary: 'uptime', text: '', workstream: 'product', operations: [{ type: 'addWhy', text: 'uptime' }] },
+    ],
+  };
+
+  const answerWith = (status, body) => vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: status === 200, status, json: async () => body,
+  })));
+
+  it('stays folded away, so what is waiting does not bury the box', async () => {
+    answerWith(200, QUEUED);
+    await mount();
+    expect(container.textContent).toContain('Waiting on you · 1');
+    // Folded: the changes inside are not on the page until it is opened.
+    expect(container.textContent).not.toContain('tiers decided');
+    expect(container.querySelector('.contribute')).toBeTruthy();
+  });
+
+  it('shows only what is waiting on the part of the work being read', async () => {
+    answerWith(200, QUEUED);
+    await mount();
+    expect(container.textContent).toContain('records the pricing decision');
+    expect(container.textContent).not.toContain('uptime');
+  });
+
+  it('opens one at a time, and says what a change no longer points at', async () => {
+    answerWith(200, QUEUED);
+    await mount();
+    const row = container.querySelector('.log-meta');
+    await act(async () => row.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(container.textContent).toContain('tiers decided');
+    expect(container.textContent).toMatch(/Already gone from the context/);
+    expect(container.textContent).not.toMatch(/unknown id/);
+  });
+
+  it('leaves a change that points at nothing out of the approval', async () => {
+    answerWith(200, QUEUED);
+    await mount();
+    await act(async () => container.querySelector('.log-meta').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    // One of the two is picked, so the button offers that one rather than both.
+    expect(container.textContent).toContain('approve 1 of 2');
+  });
+
+  it('sends the picked changes, and only those', async () => {
+    answerWith(200, QUEUED);
+    await mount();
+    await act(async () => container.querySelector('.log-meta').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const approve = [...container.querySelectorAll('.proposal-actions button')][0];
+    await act(async () => approve.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const sent = JSON.parse(fetch.mock.calls.at(-1)[1].body);
+    expect(fetch.mock.calls.at(-1)[0]).toContain('action=approve');
+    expect(sent).toMatchObject({ id: 'c-9', only: [0] });
+  });
+});

@@ -54,8 +54,8 @@ export const applyContribution = ({ owner, repo, workstream, text, summary, oper
 export const discardContribution = ({ owner, repo, workstream, text }) =>
   call({ owner, repo, action: 'discard', body: { workstream, text } });
 
-export const approveQueued = ({ owner, repo, id }) =>
-  call({ owner, repo, action: 'approve', body: { id } });
+export const approveQueued = ({ owner, repo, id, only = null }) =>
+  call({ owner, repo, action: 'approve', body: { id, ...(only ? { only } : {}) } });
 
 export const rejectQueued = ({ owner, repo, id, reason }) =>
   call({ owner, repo, action: 'reject', body: { id, reason } });

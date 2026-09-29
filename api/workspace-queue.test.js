@@ -167,3 +167,88 @@ describe('tasks', () => {
     expect(body.task.status).toBe('open');
   });
 });
+
+describe('what a queued change still points at', () => {
+  it('carries the statement it edits, not only its id', async () => {
+    // The page printed "(unknown id 4f329zt7)" and left the reader to work out
+    // whether that was their data or our bug.
+    repo.files.set('.teamctx/workstreams/product.json', JSON.stringify({
+      id: 'product', name: 'Product', tasks: [],
+      whys: [{ id: 'w1', text: 'go to Vietnam', whats: [] }],
+    }));
+    repo.files.set('.teamctx/queue/c-9.json', JSON.stringify({
+      ...QUEUED, operations: [{ type: 'editStatement', id: 'w1', text: 'go to Thailand' }],
+    }));
+    const { body } = await call({ session: MANAGER });
+    expect(body.pending[0].operations[0]).toMatchObject({ was: 'go to Vietnam', tier: 'why', gone: false });
+  });
+
+  it('says when the statement is not there any more', async () => {
+    repo.files.set('.teamctx/queue/c-9.json', JSON.stringify({
+      ...QUEUED, operations: [{ type: 'deleteStatement', id: '4f329zt7' }],
+    }));
+    const { body } = await call({ session: MANAGER });
+    expect(body.pending[0].operations[0]).toMatchObject({ gone: true, was: null });
+  });
+
+  it('resolves against the tree the change belongs to, not the one being read', async () => {
+    // A queued change on one part of the work is reviewed from a page that may
+    // be showing another.
+    repo.files.set('.teamctx/workstreams/tech.json', JSON.stringify({
+      id: 'tech', name: 'Tech', tasks: [], whys: [{ id: 't1', text: 'keep it up', whats: [] }],
+    }));
+    repo.files.set('.teamctx/queue/c-8.json', JSON.stringify({
+      ...QUEUED, id: 'c-8', workstream: 'tech',
+      operations: [{ type: 'editStatement', id: 't1', text: 'keep it running' }],
+    }));
+    const { body } = await call({ session: MANAGER });
+    const tech = body.pending.find(q => q.id === 'c-8');
+    expect(tech.workstream).toBe('tech');
+    expect(tech.operations[0].was).toBe('keep it up');
+  });
+});
+
+describe('approving part of what was sent', () => {
+  const THREE = {
+    ...QUEUED,
+    operations: [
+      { type: 'addWhy', text: 'first' },
+      { type: 'addWhy', text: 'second' },
+      { type: 'addWhy', text: 'third' },
+    ],
+  };
+
+  it('lands only the changes that were picked', async () => {
+    // A manager who has to take all six or none will take all six.
+    repo.files.set('.teamctx/queue/c-9.json', JSON.stringify(THREE));
+    const { status, body } = await call({ action: 'approve', session: MANAGER, body: { id: 'c-9', only: [0, 2] } });
+    expect(status).toBe(200);
+    expect(tree('product').whys.map(w => w.text)).toEqual(['first', 'third']);
+    expect(body.leftOut).toBe(1);
+  });
+
+  it('closes the item either way, so nothing waits forever', async () => {
+    repo.files.set('.teamctx/queue/c-9.json', JSON.stringify(THREE));
+    const { body } = await call({ action: 'approve', session: MANAGER, body: { id: 'c-9', only: [1] } });
+    expect(body.pending).toEqual([]);
+  });
+
+  it('records in the history that it was not all of it', async () => {
+    repo.files.set('.teamctx/queue/c-9.json', JSON.stringify(THREE));
+    await call({ action: 'approve', session: MANAGER, body: { id: 'c-9', only: [1] } });
+    expect(repo.commits.join(' ')).toMatch(/1 of 3 changes/);
+  });
+
+  it('still takes all of them when nothing was picked out', async () => {
+    repo.files.set('.teamctx/queue/c-9.json', JSON.stringify(THREE));
+    const { body } = await call({ action: 'approve', session: MANAGER, body: { id: 'c-9' } });
+    expect(tree('product').whys).toHaveLength(3);
+    expect(body.leftOut).toBe(0);
+  });
+
+  it('refuses an approval that keeps nothing', async () => {
+    repo.files.set('.teamctx/queue/c-9.json', JSON.stringify(THREE));
+    const { status } = await call({ action: 'approve', session: MANAGER, body: { id: 'c-9', only: [] } });
+    expect(status).toBe(400);
+  });
+});

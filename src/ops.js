@@ -116,3 +116,21 @@ export function applyOps(workstream, ops, contributionId) {
   for (const op of deletes) next = applyDelete(next, op);
   return next;
 }
+
+/**
+ * Every statement in a tree, by id, with the tier it sits at.
+ *
+ * Written for the queue: an operation names the statement it edits or deletes,
+ * and whoever reviews it needs the statement, not the id.
+ */
+export function flattenStatements(tree) {
+  const out = new Map();
+  for (const why of tree?.whys || []) {
+    out.set(why.id, { tier: 'why', node: why });
+    for (const what of why.whats || []) {
+      out.set(what.id, { tier: 'what', node: what });
+      for (const how of what.hows || []) out.set(how.id, { tier: 'how', node: how });
+    }
+  }
+  return out;
+}

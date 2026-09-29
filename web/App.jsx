@@ -135,12 +135,30 @@ function flattenStatements(workstream) {
   return out;
 }
 
-function OpCard({ op, workstream }) {
+function OpCard({ op, workstream, picked = null, onPick = null }) {
   const flat = flattenStatements(workstream);
+  // The server resolves a queued operation against the tree it belongs to,
+  // which the page may not be showing. Fall back to the tree in hand for a
+  // proposal that has not been queued and has no such annotation.
+  const was = op.was ?? flat.get(op.id)?.node.text ?? null;
+  const gone = op.gone ?? (!!op.id && !flat.has(op.id));
+  const wrap = (body, kind) => (onPick ? (
+    <label className={`op-card ${kind}${picked ? "" : " unpicked"}`} style={{ display: "block", cursor: "pointer" }}>
+      <input
+        type="checkbox"
+        checked={picked}
+        onChange={onPick}
+        style={{ width: "auto", marginRight: 8, verticalAlign: "middle" }}
+      />
+      {body}
+    </label>
+  ) : (
+    <div className={`op-card ${kind}`}>{body}</div>
+  ));
 
   if (op.type === "addWhy") {
-    return (
-      <div className="op-card add">
+    return wrap(
+      <>
         <span className="op-badge">add why</span>
         <div className="op-text">{op.text}</div>
         <div className="op-summary">{op.summary}</div>
@@ -151,14 +169,14 @@ function OpCard({ op, workstream }) {
             {op.whats.some((w) => w.hows?.length) ? " + nested hows" : ""}
           </div>
         )}
-      </div>
+      </>, "add",
     );
   }
 
   if (op.type === "addWhat") {
     const parent = flat.get(op.parentWhyId);
-    return (
-      <div className="op-card add">
+    return wrap(
+      <>
         <span className="op-badge">add what</span>
         {parent && (
           <div className="op-parent">under: {parent.node.text}</div>
@@ -171,43 +189,42 @@ function OpCard({ op, workstream }) {
             {op.hows.length === 1 ? "" : "s"}
           </div>
         )}
-      </div>
+      </>, "add",
     );
   }
 
   if (op.type === "addHow") {
     const parent = flat.get(op.parentWhatId);
-    return (
-      <div className="op-card add">
+    return wrap(
+      <>
         <span className="op-badge">add how</span>
         {parent && (
           <div className="op-parent">under: {parent.node.text}</div>
         )}
         <div className="op-text">{op.text}</div>
         <div className="op-summary">{op.summary}</div>
-      </div>
+      </>, "add",
     );
   }
 
   if (op.type === "editStatement") {
-    const target = flat.get(op.id);
-    const currentText = target?.node.text;
-    const unchanged = currentText === op.text;
-    return (
-      <div className="op-card edit">
+    const unchanged = was === op.text;
+    return wrap(
+      <>
         <span className="op-badge">
-          edit {target?.tier || "statement"}
+          edit {op.tier || flat.get(op.id)?.tier || "statement"}
         </span>
-        {target && (
-          <div className="op-parent">id: {op.id.slice(0, 8)}</div>
-        )}
-        {unchanged ? (
+        {gone ? (
+          <div className="op-gone">
+            This is not in the context any more — approving it changes nothing.
+          </div>
+        ) : unchanged ? (
           <div className="op-summary">no text change — summary updated only</div>
         ) : (
           <div className="op-diff-rows">
             <div className="op-diff-row now">
               <span className="tag">now</span>
-              {currentText || <em style={{ color: "var(--faint)" }}>(missing)</em>}
+              {was}
             </div>
             <div className="op-diff-row proposed">
               <span className="tag">proposed</span>
@@ -216,24 +233,108 @@ function OpCard({ op, workstream }) {
           </div>
         )}
         <div className="op-summary">{op.summary}</div>
-      </div>
+      </>, "edit",
     );
   }
 
   if (op.type === "deleteStatement") {
-    const target = flat.get(op.id);
-    return (
-      <div className="op-card delete">
+    return wrap(
+      <>
         <span className="op-badge">
-          delete {target?.tier || "statement"}
+          remove {op.tier || flat.get(op.id)?.tier || "statement"}
         </span>
-        <div className="op-text">{target?.node.text || `(unknown id ${op.id.slice(0, 8)})`}</div>
+        {gone ? (
+          <div className="op-gone">
+            Already gone from the context — approving it changes nothing.
+          </div>
+        ) : (
+          <div className="op-text">{was}</div>
+        )}
         <div className="op-summary">{op.summary}</div>
-      </div>
+      </>, "delete",
     );
   }
 
   return null;
+}
+
+/**
+ * What is waiting on the manager, out of the way until it is being read.
+ *
+ * Every pending contribution used to be drawn open, one after another, above
+ * the box for adding context — six changes deep on a busy project, so the thing
+ * people came to do was below the fold. It is one line now, and opens an item at
+ * a time.
+ */
+function PendingQueue({ items, workstream, onApprove, onReject }) {
+  const [openId, setOpenId] = useState(null);
+  const [picked, setPicked] = useState({});
+
+  if (!items.length) return null;
+  const open = items.find((q) => q.id === openId) || null;
+
+  const pickedFor = (q) => picked[q.id]
+    ?? q.operations.map((op, i) => (op.gone ? null : i)).filter((i) => i !== null);
+
+  return (
+    <section className="block">
+      <div className="view-toggle-bar">
+        <span className="section-title" style={{ margin: 0 }}>
+          Waiting on you · {items.length}
+        </span>
+      </div>
+      <div className="log">
+        {items.map((q) => {
+          const isOpen = q.id === openId;
+          const keep = pickedFor(q);
+          return (
+            <div key={q.id} className={`log-row${isOpen ? " expanded" : ""}`}>
+              <div className="log-meta" onClick={() => setOpenId(isOpen ? null : q.id)} style={{ cursor: "pointer" }}>
+                <span className="chip human">{q.operations.length} change{q.operations.length === 1 ? "" : "s"}</span>
+                <span>{q.summary || "(no summary)"}</span>
+                <span className="status logged">· from {q.author}</span>
+                <span className="log-chevron" style={{ marginLeft: "auto" }}>{isOpen ? "▲" : "▼"}</span>
+              </div>
+              {isOpen && (
+                <div className="log-body">
+                  {q.text && <div className="explain-quote">{q.text}</div>}
+                  {q.operations.map((op, i) => (
+                    <OpCard
+                      key={i}
+                      op={op}
+                      workstream={workstream}
+                      picked={keep.includes(i)}
+                      onPick={() => setPicked((prev) => ({
+                        ...prev,
+                        [q.id]: keep.includes(i) ? keep.filter((k) => k !== i) : [...keep, i],
+                      }))}
+                    />
+                  ))}
+                  <div className="proposal-actions">
+                    <button
+                      className="primary"
+                      disabled={keep.length === 0}
+                      onClick={() => onApprove(q.id, keep.length === q.operations.length ? null : keep)}
+                    >
+                      {keep.length === q.operations.length
+                        ? "approve all"
+                        : `approve ${keep.length} of ${q.operations.length}`}
+                    </button>
+                    <button onClick={() => onReject(q.id)}>reject</button>
+                  </div>
+                  {keep.length < q.operations.length && keep.length > 0 && (
+                    <p className="muted" style={{ margin: "8px 0 0" }}>
+                      The rest are left behind — the person who sent this is told either way.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function ProposalReview({
@@ -717,14 +818,15 @@ function MainApp() {
     }
   }
 
-  async function approveQueuedItem(id) {
+  async function approveQueuedItem(id, only = null) {
     setError("");
     try {
-      const r = await approveQueued({ ...project, id });
+      const r = await approveQueued({ ...project, id, only });
       setWorkstreams((prev) =>
         prev.map((w) => (w.id === r.workstream ? { ...w, whys: r.tree?.whys || w.whys } : w)),
       );
       setPending(r.pending || []);
+      if (r.leftOut) setNotice(`Approved. ${r.leftOut} change${r.leftOut === 1 ? " was" : "s were"} left behind.`);
     } catch (err) {
       setError(errorText(err));
     }
@@ -1039,19 +1141,12 @@ function MainApp() {
                   </div>
                 );
               })()}
-              {pending.filter((q) => q.workstream === current.id).map((q) => (
-                <section className="block" key={q.id}>
-                  <ProposalReview
-                    proposal={{ ...q, willQueue: false }}
-                    workstream={current}
-                    heading={`Waiting on you · from ${q.author}`}
-                    approveLabel="approve & merge"
-                    rejectLabel="reject"
-                    onApprove={() => approveQueuedItem(q.id)}
-                    onReject={() => rejectQueuedItem(q.id)}
-                  />
-                </section>
-              ))}
+              <PendingQueue
+                items={pending.filter((q) => q.workstream === current.id)}
+                workstream={current}
+                onApprove={approveQueuedItem}
+                onReject={rejectQueuedItem}
+              />
               {pendingProposal && pendingProposal.workstreamId === current.id ? (
                 <section className="block">
                   <ProposalReview

@@ -59,7 +59,11 @@ const ACTIONS = {
 
   async approve({ owner, repo, user, body }) {
     if (!body?.id) throw new BadRequest('Which one?');
-    return approveQueued({ owner, repo, user, id: String(body.id) });
+    // `only` is which of the changes to keep. Absent means all of them, which is
+    // what approving from the terminal or an assistant has always meant.
+    const only = Array.isArray(body.only) ? body.only.map(Number).filter(n => Number.isInteger(n)) : null;
+    if (only && only.length === 0) throw new BadRequest('Nothing is selected to approve.');
+    return approveQueued({ owner, repo, user, id: String(body.id), only });
   },
 
   async reject({ owner, repo, user, body }) {

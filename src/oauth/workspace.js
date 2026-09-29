@@ -12,6 +12,7 @@ import { listPendingReviews, approveReview, rejectReview } from '../../cli/comma
 import { setTaskStatus, getTask } from '../../cli/commands/task.core.js';
 import { inScope } from '../member-scope.js';
 import { PROJECT_LEVEL, isProjectLevel, resolveTarget } from '../project-level.js';
+import { flattenStatements } from '../ops.js';
 import { openProject, ProjectViewError } from './project-view.js';
 
 /**
@@ -115,17 +116,7 @@ export async function readWorkspace({ owner, repo, user }) {
       }));
 
     // The queue is the manager's to clear, so only they are sent what is in it.
-    const pending = isManager
-      ? (await listPendingReviews({})).map(q => ({
-        id: q.id,
-        author: q.author,
-        summary: q.summary,
-        operations: q.operations || [],
-        text: q.text || '',
-        createdAt: q.createdAt || null,
-        workstream: toKey(resolveTarget(q.workstream)),
-      }))
-      : [];
+    const pending = isManager ? (await listPendingReviews({})).map(queuedItem) : [];
 
     return {
       tasks,
@@ -291,22 +282,15 @@ export async function discardContribution({ owner, repo, user, workstream, text 
  * gate reads the identity teamctx resolved, and a caller who is not the manager
  * is refused whether they arrived from the terminal, an assistant or this page.
  */
-export async function approveQueued({ owner, repo, user, id }) {
+export async function approveQueued({ owner, repo, user, id, only = null }) {
   return openProject({ owner, repo, user }, async ({ actor }) => runWithActor(actor, async () => {
-    const r = await approveReview({ id });
+    const r = await approveReview({ id, only });
     return {
       id: r.id,
       workstream: toKey(r.workstream),
+      leftOut: r.leftOut || 0,
       tree: readTree(r.workstream),
-      pending: (await listPendingReviews({})).map(q => ({
-        id: q.id,
-        author: q.author,
-        summary: q.summary,
-        operations: q.operations || [],
-        text: q.text || '',
-        createdAt: q.createdAt || null,
-        workstream: toKey(resolveTarget(q.workstream)),
-      })),
+      pending: (await listPendingReviews({})).map(queuedItem),
     };
   }));
 }
@@ -316,15 +300,7 @@ export async function rejectQueued({ owner, repo, user, id, reason }) {
     await rejectReview({ id, reason: reason || 'rejected from the workspace' });
     return {
       id,
-      pending: (await listPendingReviews({})).map(q => ({
-        id: q.id,
-        author: q.author,
-        summary: q.summary,
-        operations: q.operations || [],
-        text: q.text || '',
-        createdAt: q.createdAt || null,
-        workstream: toKey(resolveTarget(q.workstream)),
-      })),
+      pending: (await listPendingReviews({})).map(queuedItem),
     };
   }));
 }
@@ -385,6 +361,44 @@ export async function askProject({ owner, repo, user, workstream, question, role
     });
     return { answer };
   })));
+}
+
+/**
+ * A queued change, with what it still points at.
+ *
+ * An operation carries the id of the statement it edits or deletes, and the
+ * tree moves on: somebody approves a change that rewrites the same lines, and
+ * what was queued behind it now names statements that are not there any more.
+ * The page had no way to tell — it printed "(unknown id 4f329zt7)" and left the
+ * reader to work out whether that was their data or our bug.
+ *
+ * Resolved here, against the tree the item actually belongs to, which the page
+ * may not even be showing.
+ */
+function queuedItem(q) {
+  const target = resolveTarget(q.workstream);
+  const flat = flattenStatements(readTree(target) || { whys: [] });
+  return {
+    id: q.id,
+    author: q.author,
+    summary: q.summary,
+    text: q.text || '',
+    createdAt: q.createdAt || null,
+    workstream: toKey(target),
+    operations: (q.operations || []).map((op) => {
+      if (op.type !== 'editStatement' && op.type !== 'deleteStatement') return op;
+      const found = flat.get(op.id);
+      return {
+        ...op,
+        // What the statement says now, so the manager is comparing against the
+        // context rather than against an id.
+        was: found ? found.node.text : null,
+        tier: found ? found.tier : null,
+        // Nothing left to edit or delete: approving it changes nothing.
+        gone: !found,
+      };
+    }),
+  };
 }
 
 /**
