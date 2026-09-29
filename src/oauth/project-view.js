@@ -5,6 +5,7 @@ import { memberByEmail } from '../../cli/commands/member.core.js';
 import { scopeFor } from '../member-scope.js';
 import { managerKeys, matchesActor } from '../review.js';
 import { kvGet, keys } from './kv.js';
+import { githubIdsFor } from './ai-keys.js';
 
 /**
  * Opening a project on the web, for whoever asked to.
@@ -86,6 +87,13 @@ export async function openProject({ owner, repo, user }, body) {
     throw new ProjectViewError(`${owner}/${repo} could not be read: ${e.message}`);
   }
 
+  // Everything this person has proved they are. A sign-in with no GitHub
+  // account of its own still reaches a project gated on the GitHub account
+  // behind the same verified address.
+  if (actor.source !== 'github' && actor.email) {
+    actor.keys = (await githubIdsFor(actor.email)).map(id => `github:${id}`);
+  }
+
   return runWithSession(session, async () => {
     const config = readConfig();
     // Matched against the gate itself, never `canApprove`: that answers yes to
@@ -96,7 +104,9 @@ export async function openProject({ owner, repo, user }, body) {
     // A sign-in with no GitHub account of its own reads through the credential
     // the project lends, so the roster is what stands in front of it. Without
     // this, any Google account anywhere could read any project that lends one.
-    if (checkRoster && !isManager && !memberByEmail(config.members, actor.email)) {
+    const onRoster = memberByEmail(config.members, actor.email)
+      || (config.members || []).some(m => matchesActor(m.key, actor));
+    if (checkRoster && !isManager && !onRoster) {
       throw new ProjectViewError(
         `${actor.email} is not on the ${owner}/${repo} roster. `
         + 'Ask the manager to add that exact address, or sign in with the one they invited.');

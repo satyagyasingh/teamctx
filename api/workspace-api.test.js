@@ -214,6 +214,25 @@ describe('who counts as the manager', () => {
     expect(status).toBe(403);
   });
 
+  it('is the GitHub account behind the same verified address', async () => {
+    // A project made through a GitHub sign-in can carry a `github:<id>` gate.
+    // The person behind it, signing in with the address GitHub verified for
+    // that account, was a stranger at their own project.
+    repo.files.set('.teamctx/config.json', JSON.stringify({ ...CONFIG, managerKey: 'github:99', members: [] }));
+    await kvSet(keys.githubIdentities('priya@example.com'), { ids: ['99'] });
+    await lend();
+    const { status, body } = await call({ session: MEMBER });
+    expect(status).toBe(200);
+    expect(body.me.isManager).toBe(true);
+  });
+
+  it('is not somebody whose address has proved nothing', async () => {
+    repo.files.set('.teamctx/config.json', JSON.stringify({ ...CONFIG, managerKey: 'github:99', members: [] }));
+    await lend();
+    const { status } = await call({ session: MEMBER });
+    expect(status).toBe(403);
+  });
+
   it('is the address on the gate, however they signed in', async () => {
     await lend();
     const { body } = await call({ session: { ...MEMBER, name: 'Maya', email: 'maya@example.com' } });

@@ -193,6 +193,14 @@ export async function adoptGithubRecords({ email, githubId, githubLogin } = {}) 
   const who = norm(email);
   const id = String(githubId);
 
+  // The same person, two ways in. GitHub vouched for this address, so a later
+  // Google sign-in carrying it is the account that made the project — and can
+  // be recognised by a gate or a roster entry written as a GitHub id.
+  const linked = (await kvGet(keys.githubIdentities(who)))?.ids || [];
+  if (!linked.includes(id)) {
+    await kvSet(keys.githubIdentities(who), { ids: [...linked, id] });
+  }
+
   if (!(await kvGet(keys.personalAiKey(who)))) {
     const legacy = await kvGet(keys.aiKey(id));
     if (legacy?.apiKey) await kvSet(keys.personalAiKey(who), { provider: legacy.provider || 'anthropic', apiKey: legacy.apiKey });
@@ -253,3 +261,9 @@ export async function projectsKnownFor(email) {
   return [...new Set(lists.flatMap(l => l?.projects || []))].sort();
 }
 
+
+/** The GitHub accounts this address has proved it owns. */
+export async function githubIdsFor(email) {
+  if (!email) return [];
+  return (await kvGet(keys.githubIdentities(norm(email))))?.ids || [];
+}
