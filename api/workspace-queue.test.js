@@ -277,3 +277,38 @@ describe('knowing that work is waiting', () => {
     expect(body.pending).toHaveLength(2);
   });
 });
+
+describe('adding a part of the work', () => {
+  it('creates it empty, inheriting the project like any other', async () => {
+    const { status, body } = await call({ action: 'workstream', session: MANAGER, body: { name: 'Go to market' } });
+    expect(status).toBe(200);
+    expect(body.workstream).toMatchObject({ id: 'go-to-market', name: 'Go to market', whys: [] });
+    expect(JSON.parse(repo.files.get('.teamctx/config.json')).workstreams.map(w => w.id))
+      .toContain('go-to-market');
+    expect(repo.files.has('.teamctx/workstreams/go-to-market.json')).toBe(true);
+    expect(repo.commits.join(' ')).toMatch(/workstream: add "Go to market"/);
+  });
+
+  it('leaves the parts that already exist alone', async () => {
+    const before = repo.files.get('.teamctx/workstreams/product.json');
+    await call({ action: 'workstream', session: MANAGER, body: { name: 'Go to market' } });
+    expect(repo.files.get('.teamctx/workstreams/product.json')).toBe(before);
+  });
+
+  it('is the manager to do, on a shared project', async () => {
+    await lend();
+    const { status } = await call({ action: 'workstream', session: MEMBER, body: { name: 'Go to market' } });
+    expect(status).toBe(403);
+    expect(repo.files.has('.teamctx/workstreams/go-to-market.json')).toBe(false);
+  });
+
+  it('refuses a name the project already uses', async () => {
+    const { status, body } = await call({ action: 'workstream', session: MANAGER, body: { name: 'Product' } });
+    expect(status).toBe(400);
+    expect(body.error).toMatch(/already has a part of the work/);
+  });
+
+  it('refuses a name with nothing in it', async () => {
+    expect((await call({ action: 'workstream', session: MANAGER, body: { name: '  ' } })).status).toBe(400);
+  });
+});

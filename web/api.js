@@ -95,3 +95,6 @@ export async function addExistingProject(project) {
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
+
+export const addWorkstream = ({ owner, repo, name }) =>
+  call({ owner, repo, action: 'workstream', body: { name } });

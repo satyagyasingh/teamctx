@@ -6,7 +6,7 @@ import { commitContext } from '../git.js';
 import { runWithActor } from '../actor.js';
 import { contributeCore } from '../../cli/commands/contribute.core.js';
 import { needsReview } from '../review-policy.js';
-import { listAllWorkstreams } from '../../cli/commands/workstream.core.js';
+import { listAllWorkstreams, createWorkstream } from '../../cli/commands/workstream.core.js';
 import { listMembers } from '../../cli/commands/member.core.js';
 import { listPendingReviews, approveReview, rejectReview } from '../../cli/commands/review.core.js';
 import { setTaskStatus, getTask } from '../../cli/commands/task.core.js';
@@ -430,4 +430,31 @@ export async function readRole({ owner, repo, user, slug }) {
     if (!isManager && !mine) throw new ProjectViewError('That is not your role.');
     return { slug, md: readRoleFile(slug) || '' };
   });
+}
+
+/**
+ * A new part of the work, named rather than proposed.
+ *
+ * Manager-only, here rather than in the core: the terminal is one person on
+ * their own repository, and this is a shared project where adding a strand is a
+ * structural change the roster should not be able to make unasked.
+ */
+export async function addWorkstream({ owner, repo, user, name }) {
+  return openProject({ owner, repo, user }, async ({ actor, isManager, config }) => runWithActor(actor, async () => {
+    if (!isManager) {
+      throw new ProjectViewError('Adding a part of the work is the manager\'s to do.');
+    }
+    const created = await createWorkstream({ name });
+    const members = listMembers({}).filter(m => m.kind !== 'agent');
+    return {
+      workstream: {
+        id: created.id,
+        name: created.name,
+        isProject: false,
+        whys: [],
+        members: membersOn(members, created.id).map(m => m.name),
+      },
+      project: config.project,
+    };
+  }));
 }

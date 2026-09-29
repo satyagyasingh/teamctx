@@ -1,7 +1,7 @@
 import { currentUser } from '../../../src/oauth/session.js';
 import {
   readWorkspace, proposeContribution, applyContribution, discardContribution,
-  approveQueued, rejectQueued, markTask, askProject, readRole,
+  approveQueued, rejectQueued, markTask, askProject, readRole, addWorkstream,
 } from '../../../src/oauth/workspace.js';
 import { ProjectViewError } from '../../../src/oauth/project-view.js';
 import { ManagerGateError } from '../../../cli/commands/review.core.js';
@@ -57,6 +57,12 @@ const ACTIONS = {
     return readRole({ owner, repo, user, slug: String(body.slug) });
   },
 
+  async workstream({ owner, repo, user, body }) {
+    const name = String(body?.name || '').trim();
+    if (!name) throw new BadRequest('Give it a name.');
+    return addWorkstream({ owner, repo, user, name });
+  },
+
   async approve({ owner, repo, user, body }) {
     if (!body?.id) throw new BadRequest('Which one?');
     // `only` is which of the changes to keep. Absent means all of them, which is
@@ -107,6 +113,9 @@ export default async function handler(req, res) {
     res.status(200).json(await run({ owner, repo, user, req, body: req.body }));
   } catch (e) {
     if (e instanceof BadRequest) return res.status(400).json({ error: e.message });
+    // A name that is already taken, or produces no id at all, is something the
+    // person can fix — reporting it as a server fault tells them to give up.
+    if (e.code === 'WORKSTREAM_SPLIT') return res.status(400).json({ error: e.message });
     // The manager gate and the roster both refuse by throwing. Neither is a
     // fault in the request, so neither is reported as one — and neither is a
     // fault in the server, which is what a 500 would have said.

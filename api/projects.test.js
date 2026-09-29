@@ -25,7 +25,25 @@ async function call({ session = null } = {}) {
   return { status: code, body: payload };
 }
 
-beforeEach(() => __resetMemory());
+/**
+ * GitHub, without GitHub.
+ *
+ * Naming a project means reading a file out of its repository, and a test that
+ * reaches the network is a test that fails on somebody else's outage. Every case
+ * here starts with a repository that answers; the ones that care about failure
+ * say so themselves.
+ */
+const githubAnswers = (config = { project: 'Ledger' }) => vi.stubGlobal('fetch', vi.fn(async () => ({
+  ok: true,
+  status: 200,
+  json: async () => ({ content: Buffer.from(JSON.stringify(config)).toString('base64') }),
+})));
+
+beforeEach(() => {
+  __resetMemory();
+  githubAnswers();
+});
+afterEach(() => vi.unstubAllGlobals());
 
 describe('listing what somebody can open', () => {
   it('sends a signed-out caller to the screen that signs them in', async () => {
@@ -65,7 +83,6 @@ describe('listing what somebody can open', () => {
     const { status, body } = await call({ session: USER });
     expect(status).toBe(200);
     expect(body.projects[0]).toMatchObject({ slug: 'acme/ledger', name: null });
-    vi.unstubAllGlobals();
   });
 
   it('carries who is asking, so the page can say it', async () => {
@@ -89,8 +106,6 @@ describe('adding a project somebody already has', () => {
     status: ok ? 200 : 404,
     json: async () => ({ content: Buffer.from(JSON.stringify({ project: 'Ledger' })).toString('base64') }),
   })));
-
-  afterEach(() => vi.unstubAllGlobals());
 
   it('remembers it once teamctx can see the project', async () => {
     github(true);

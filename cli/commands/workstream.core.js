@@ -34,6 +34,42 @@ async function commitAndOptionallyPush(config, msg, projectDir) {
   catch (err) { return { pushed: false, pushError: err.message?.split('\n')[0] || err.stderr?.trim() || 'no remote?' }; }
 }
 
+/**
+ * A new, empty part of the work.
+ *
+ * Until now a workstream could only be born by splitting one that already had
+ * context — the model reads a tree, proposes where it divides, and the parts
+ * carry their Whys with them. That is the better move when there is something
+ * to divide. It is no help at all when somebody knows perfectly well that sales
+ * and engineering are separate strands and has not written either down yet.
+ *
+ * Empty, and inheriting the project like any other: nothing moves, so no
+ * sibling's compiled page changes and no role is reassigned.
+ */
+export async function createWorkstream({ name, teamctxDir, projectDir } = {}) {
+  const clean = String(name || '').trim();
+  if (!clean) throw new WorkstreamSplitError('a name is required.');
+  const config = readConfig(teamctxDir);
+  const id = slugify(clean);
+  if (!id) throw new WorkstreamSplitError(`"${clean}" produced an empty id — try letters and numbers.`);
+  if (knownWorkstreams(config, teamctxDir).has(id)) {
+    throw new WorkstreamSplitError(`this project already has a part of the work called "${id}".`);
+  }
+
+  const tree = { id, name: clean, whys: [] };
+  writeWorkstream(id, tree, teamctxDir);
+  writeWorkstreamMd(id, serializeToMd(tree, clean, '', [], { project: readProject(teamctxDir) }), teamctxDir);
+  writeConfig({
+    ...config,
+    workstreams: [...(config.workstreams || []), { id, name: clean, createdAt: new Date().toISOString() }],
+  }, teamctxDir);
+
+  const { pushed, pushError } = await commitAndOptionallyPush(
+    config, `workstream: add "${clean}"`, projectDir,
+  );
+  return { id, name: clean, pushed, pushError };
+}
+
 export async function listAllWorkstreams({ teamctxDir, projectDir } = {}) {
   const config = readConfig(teamctxDir);
   const active = await activeId(config, teamctxDir, projectDir);

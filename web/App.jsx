@@ -15,6 +15,7 @@ import {
   askProject,
   loadRole,
   addExistingProject,
+  addWorkstream,
 } from "./api.js";
 
 function AddLaneModal({ onCancel, onAdd }) {
@@ -774,9 +775,18 @@ function MainApp() {
   const [githubConfig, setGithubConfig] = useState(null);
   const [stalenessAlert, setStalenessAlert] = useState(false);
 
-  function addWorkstream() {
+  async function createWorkstream(name) {
     setShowAddLane(false);
-    setError("Adding a part of the work from the workspace is not wired up yet.");
+    setError("");
+    try {
+      const { workstream } = await addWorkstream({ ...project, name });
+      setWorkstreams((prev) => [...prev, workstream]);
+      setContributions((prev) => ({ ...prev, [workstream.id]: [] }));
+      setSelectedId(workstream.id);
+      setNotice(`${workstream.name} is a part of the work now. It starts empty — add context to it below.`);
+    } catch (err) {
+      setError(errorText(err));
+    }
   }
 
   const [busy, setBusy] = useState(null); // { workstreamId, kind: "propose" | "ask" } | null
@@ -1253,7 +1263,7 @@ function MainApp() {
       {showAddLane && (
         <AddLaneModal
           onCancel={() => setShowAddLane(false)}
-          onAdd={addWorkstream}
+          onAdd={createWorkstream}
         />
       )}
       <AskPanel
