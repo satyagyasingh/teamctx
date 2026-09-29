@@ -1,4 +1,8 @@
-import { readConfig, readTree, readContributions, appendContribution, listTasks } from '../storage.js';
+import { readConfig, readTree, readContributions, appendContribution, listTasks, readTreeMd, readRoleFile } from '../storage.js';
+import { answerQuestion } from '../context.js';
+import { runWithAiKey } from '../ai-context.js';
+import { readPersonalKey, readProjectKeys, pickProjectKey } from './ai-keys.js';
+import { managersOf } from '../managers.js';
 import { commitContext } from '../git.js';
 import { runWithActor } from '../actor.js';
 import { contributeCore } from '../../cli/commands/contribute.core.js';
@@ -147,6 +151,33 @@ export async function readWorkspace({ owner, repo, user }) {
 }
 
 /**
+ * The key the model is called with.
+ *
+ * The connector works this out for every tool call; the workspace did not work
+ * it out at all, so anything that reached a model from the web failed with no
+ * key while the same project answered an assistant fine. Same order as the
+ * connector: the caller's own key, then the project's.
+ *
+ * The project key is resolved lazily, on first use — most calls never need it,
+ * and reading it costs a round trip.
+ */
+async function withProjectAi({ owner, repo, user, actor }, fn) {
+  const mine = await readPersonalKey({
+    email: actor.email || user.email,
+    githubId: user.id || null,
+  });
+  // Fetched here and picked later: the resolver runs synchronously, on first
+  // use, so anything it needs from the network has to be in hand before it.
+  const projectKeys = await readProjectKeys(owner, repo);
+  const projectKey = () => {
+    const picked = pickProjectKey({ projectKeys, primaryKey: managersOf(readConfig()).primary });
+    return picked ? { apiKey: picked.apiKey, provider: picked.provider } : null;
+  };
+  if (mine?.apiKey) return runWithAiKey(mine.apiKey, fn, mine.provider || null, null, { fallback: projectKey });
+  return runWithAiKey(null, fn, null, projectKey);
+}
+
+/**
  * One contribution, across two requests.
  *
  * The interface asks the model what a contribution means, shows the person the
@@ -157,7 +188,7 @@ export async function readWorkspace({ owner, repo, user }) {
  * no trust that contributing any other way would not.
  */
 export async function proposeContribution({ owner, repo, user, workstream, text }) {
-  return openProject({ owner, repo, user }, async ({ actor, isManager }) => runWithActor(actor, async () => {
+  return openProject({ owner, repo, user }, async ({ actor, isManager }) => runWithActor(actor, () => withProjectAi({ owner, repo, user, actor }, async () => {
     let queues = false;
     const r = await contributeCore({
       text,
@@ -174,7 +205,7 @@ export async function proposeContribution({ owner, repo, user, workstream, text 
       willQueue: queues && !isManager,
       mode: r.mode,
     };
-  }));
+  })));
 }
 
 export async function applyContribution({ owner, repo, user, workstream, text, summary, operations }) {
@@ -300,4 +331,53 @@ export async function markTask({ owner, repo, user, id, status }) {
       },
     };
   }));
+}
+
+/**
+ * A question, answered from what the project holds.
+ *
+ * The interface asked `/api/claude`, which is the standalone app's own proxy and
+ * does not exist here — every click-to-explain came back as an HTML 404 the page
+ * then tried to read as JSON. It reads the same context the connector's `ask`
+ * reads, and it never writes.
+ */
+export async function askProject({ owner, repo, user, workstream, question, role }) {
+  return openProject({ owner, repo, user }, async ({ actor, config, allowed }) => runWithActor(actor, () => withProjectAi({ owner, repo, user, actor }, async () => {
+    const target = toTarget(workstream);
+    if (!inScope(allowed, target)) {
+      throw new ProjectViewError('That is not a part of the work you are on.');
+    }
+    const tree = readTree(target);
+    const answer = await answerQuestion({
+      question,
+      config,
+      workstream: tree,
+      project: isProjectLevel(target) ? null : readTree(PROJECT_LEVEL),
+      sharedMd: readTreeMd(target) || '',
+      roleMd: role ? (readRoleFile(role) || '') : '',
+      contributions: readContributions(),
+      openTasks: listTasks({}, undefined)
+        .filter(t => t.status !== 'done' && inScope(allowed, resolveTarget(t.workstream))),
+    });
+    return { answer };
+  })));
+}
+
+/**
+ * The compiled context for a role.
+ *
+ * The drawer asked the standalone app's own endpoint for this and got an HTML
+ * 404. teamctx compiles a file per role whenever the context changes, so the
+ * answer is already written — nothing here calls a model.
+ */
+export async function readRole({ owner, repo, user, slug }) {
+  return openProject({ owner, repo, user }, async ({ actor, config, isManager }) => {
+    const role = (config.roles || []).find(r => r.slug === slug);
+    if (!role) throw new ProjectViewError(`This project has no role called "${slug}".`);
+    // Your own role, or any of them if you manage the project. A compiled role
+    // carries the context that role is meant to see.
+    const mine = String(role.email || '').toLowerCase() === String(actor.email || '').toLowerCase();
+    if (!isManager && !mine) throw new ProjectViewError('That is not your role.');
+    return { slug, md: readRoleFile(slug) || '' };
+  });
 }

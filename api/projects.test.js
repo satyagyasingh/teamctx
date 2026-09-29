@@ -6,7 +6,7 @@
  * what is checked here is that all three arrive, once each, and that a
  * signed-out caller is pointed at the screen that signs them in.
  */
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 
 const { kvSet, keys, __resetMemory } = await import('../src/oauth/kv.js');
 const { addProjectKey } = await import('../src/oauth/ai-keys.js');
@@ -56,5 +56,55 @@ describe('listing what somebody can open', () => {
   it('carries who is asking, so the page can say it', async () => {
     const { body } = await call({ session: USER });
     expect(body.me.name).toBe('Maya');
+  });
+});
+
+describe('adding a project somebody already has', () => {
+  const post = async ({ session = USER, project } = {}) => {
+    if (session) await kvSet(keys.session('s'), session);
+    const req = { method: 'POST', query: {}, body: { project }, headers: session ? { cookie: 'teamctx_sid=s' } : {} };
+    let code = 200; let payload;
+    const res = { status(c) { code = c; return this; }, json(b) { payload = b; return this; } };
+    await handler(req, res);
+    return { status: code, body: payload };
+  };
+
+  const github = (ok) => vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok,
+    status: ok ? 200 : 404,
+    json: async () => ({ content: Buffer.from(JSON.stringify({ project: 'Ledger' })).toString('base64') }),
+  })));
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('remembers it once teamctx can see the project', async () => {
+    github(true);
+    const { status, body } = await post({ project: 'acme/ledger' });
+    expect(status).toBe(200);
+    expect(body.project).toEqual({ slug: 'acme/ledger', owner: 'acme', repo: 'ledger' });
+    expect((await call({ session: USER })).body.projects.map(p => p.slug)).toEqual(['acme/ledger']);
+  });
+
+  it('takes a pasted GitHub address as well as owner/repo', async () => {
+    github(true);
+    const { body } = await post({ project: 'https://github.com/acme/ledger.git' });
+    expect(body.project.slug).toBe('acme/ledger');
+  });
+
+  it('refuses a repository it cannot see a project in', async () => {
+    github(false);
+    const { status, body } = await post({ project: 'acme/nothing' });
+    expect(status).toBe(404);
+    expect(body.error).toMatch(/no teamctx project|cannot see it/);
+  });
+
+  it('says plainly that adding one needs a GitHub sign-in', async () => {
+    const { status, body } = await post({ session: { ...USER, token: null }, project: 'acme/ledger' });
+    expect(status).toBe(400);
+    expect(body.error).toMatch(/needs a GitHub sign-in/);
+  });
+
+  it('refuses something that is not owner/repo', async () => {
+    expect((await post({ project: 'ledger' })).status).toBe(400);
   });
 });

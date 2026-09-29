@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { applyOps } from "./ops.js";
-import {
-  DEFAULT_ASK_MODEL,
-  DEFAULT_DISTILL_MODEL,
-  MODELS,
-  askLane,
-  proposeDiff,
-} from "./ai.js";
+import { DEFAULT_ASK_MODEL, DEFAULT_DISTILL_MODEL, MODELS } from "./ai.js";
 import {
   SignedOutError,
   loadWorkspace,
@@ -18,6 +12,9 @@ import {
   rejectQueued,
   markTask,
   loadProjects,
+  askProject,
+  loadRole,
+  addExistingProject,
 } from "./api.js";
 
 function AddLaneModal({ onCancel, onAdd }) {
@@ -782,14 +779,14 @@ function MainApp() {
     if (!opts.keepQuote) setAskQuoted("");
     setBusy({ workstreamId: current.id, kind: "ask" });
     try {
-      const out = await askLane({
-        workstream: current,
+      const { answer: out } = await askProject({
+        ...project,
+        workstream: current.id,
         question: q,
-        model: askModel,
       });
       setAnswer(out);
     } catch (err) {
-      setError(err.message || String(err));
+      setError(errorText(err));
     } finally {
       setBusy(null);
     }
@@ -866,14 +863,7 @@ function MainApp() {
     setRoleDecisionsError("");
     roleDecisionsInflight.current = (async () => {
       try {
-        const res = await fetch("/api/role-prompt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slug: myRole }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-        const md = data.md || "";
+        const { md = "" } = await loadRole({ ...project, slug: myRole });
         roleDecisionsRef.current = md;
         setRoleDecisions(md);
         return md;
@@ -1404,289 +1394,6 @@ function ContextDrawer({ open, roleLabel, md, onClose }) {
   );
 }
 
-// ── RolePage ──────────────────────────────────────────────────────────────────
-
-function RolePage({ slug }) {
-  const [content, setContent] = useState(null);
-  const [loadErr, setLoadErr] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [askInput, setAskInput] = useState("");
-  const [askBusy, setAskBusy] = useState(false);
-  const [answer, setAnswer] = useState("");
-  const [askModel, setAskModel] = useState(DEFAULT_ASK_MODEL);
-  const [copied, setCopied] = useState("");
-  // contribution form
-  const [author, setAuthor] = useState("");
-  const [contribution, setContribution] = useState("");
-  const [distillModel, setDistillModel] = useState(DEFAULT_DISTILL_MODEL);
-  const [proposing, setProposing] = useState(false);
-  const [proposeError, setProposeError] = useState("");
-  const [proposal, setProposal] = useState(null); // { summary, operations, workstream }
-  const [applying, setApplying] = useState(false);
-
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/github?action=config").then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
-      fetch("/api/role-prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug }),
-      }).then((r) => r.json()),
-    ])
-      .then(([config, promptData]) => {
-        const r = (config.roles || []).find((x) => x.slug === slug);
-        if (!r) {
-          setLoadErr("Role not found.");
-          setLoading(false);
-          return;
-        }
-        setContent({
-          details: r.details || "",
-          decisions: promptData?.md || "",
-          name: r.name,
-        });
-        setLoading(false);
-      })
-      .catch((status) => {
-        setLoadErr(status === 404 ? "Role not found." : "Could not load role context.");
-        setLoading(false);
-      });
-  }, [slug]);
-
-  async function handlePropose() {
-    if (!contribution.trim() || !author.trim()) return;
-    setProposing(true);
-    setProposeError("");
-    setProposal(null);
-    try {
-      const res = await fetch("/api/role-propose", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, author, text: contribution, model: distillModel }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setProposal(data); // { summary, operations, workstream }
-    } catch (err) {
-      setProposeError(err.message || "Something went wrong.");
-    } finally {
-      setProposing(false);
-    }
-  }
-
-  async function handleApply() {
-    if (!proposal) return;
-    setApplying(true);
-    setProposeError("");
-    try {
-      const res = await fetch("/api/role-apply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slug,
-          operations: proposal.operations,
-          author,
-          text: contribution,
-          model: distillModel,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      // tree changed — refetch decisions for this role
-      const decisionsRes = await fetch("/api/role-prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug }),
-      }).then((r) => r.json()).catch(() => ({ md: "" }));
-      setContent((prev) => prev ? { ...prev, decisions: decisionsRes?.md || prev.decisions } : prev);
-      setProposal(null);
-      setContribution("");
-    } catch (err) {
-      setProposeError(err.message || "Apply failed.");
-    } finally {
-      setApplying(false);
-    }
-  }
-
-  function copyFor(platform) {
-    if (!content) return;
-    const assembled = [
-      "## Your Role",
-      "",
-      content.details,
-      "",
-      content.decisions || "## Open Decisions (Yours to Make)\nNone currently.",
-      "",
-    ].join("\n");
-    navigator.clipboard.writeText(assembled);
-    setCopied(platform);
-    setTimeout(() => setCopied(""), 2000);
-  }
-
-  async function handleAsk() {
-    if (!askInput.trim() || !content) return;
-    setAskBusy(true);
-    setAnswer("");
-    try {
-      const res = await fetch("/api/claude", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: askModel,
-          prompt: askInput,
-          system: `You are a helpful assistant answering questions about a team member's role context. Ground your answers in the context below.\n\n## Your Role\n${content.details}\n\n${content.decisions || ""}`,
-          max_tokens: 512,
-        }),
-      });
-      const data = await res.json();
-      setAnswer(data?.content?.[0]?.text ?? "No answer returned.");
-    } catch {
-      setAnswer("Something went wrong. Please try again.");
-    } finally {
-      setAskBusy(false);
-    }
-  }
-
-  const card = {
-    background: "var(--card)",
-    border: "1px solid var(--line)",
-    borderRadius: 6,
-    padding: "20px 24px",
-    marginBottom: 20,
-  };
-
-  if (loading)
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ color: "var(--soft)" }}>Loading role context…</span>
-      </div>
-    );
-
-  if (loadErr)
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ color: "#c00" }}>{loadErr}</span>
-      </div>
-    );
-
-  return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "32px 20px" }}>
-      <div style={card}>
-        <div style={{ fontFamily: "var(--font-serif)", fontSize: 22, marginBottom: 6 }}>{content.name}</div>
-        <div>{renderMd(content.details)}</div>
-        <div style={{ marginTop: 18 }}>
-          <h2 className="section-title" style={{ margin: "0 0 6px" }}>Open Decisions (Yours to Make)</h2>
-          {content.decisions ? (
-            <div>{renderMd(content.decisions.replace(/^##\s*Open Decisions[^\n]*\n+/i, "").trim())}</div>
-          ) : (
-            <p style={{ color: "var(--soft)", fontSize: 13 }}>None currently.</p>
-          )}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            marginTop: 20,
-            paddingTop: 16,
-            borderTop: "1px solid var(--line)",
-          }}
-        >
-          <span style={{ color: "var(--soft)", fontSize: 13 }}>Bring your team context to:</span>
-          {["claude", "chatgpt", "gemini"].map((p) => (
-            <button
-              key={p}
-              className={copied === p ? "primary" : "ghost"}
-              onClick={() => copyFor(p)}
-              style={{ fontSize: 13 }}
-            >
-              {copied === p
-                ? "✓ Copied"
-                : p === "claude"
-                ? "Claude"
-                : p === "chatgpt"
-                ? "ChatGPT"
-                : "Gemini"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={card}>
-        <h4 className="section-title">Ask about your context</h4>
-        <div className="ask-row">
-          <input
-            value={askInput}
-            onChange={(e) => setAskInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !askBusy && handleAsk()}
-            placeholder="Ask a question about your role…"
-          />
-          <select value={askModel} onChange={(e) => setAskModel(e.target.value)}>
-            {MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-          <button className="primary" onClick={handleAsk} disabled={askBusy || !askInput.trim()}>
-            {askBusy ? "…" : "Ask"}
-          </button>
-        </div>
-        {answer && <div className="answer">{answer}</div>}
-      </div>
-
-      <div style={card}>
-        <h4 className="section-title">Add a contribution</h4>
-        {proposal ? (
-          <>
-            <ProposalReview
-              proposal={proposal}
-              workstream={proposal.workstream}
-              onApprove={handleApply}
-              onReject={() => { setProposal(null); setProposeError(""); }}
-            />
-            {applying && <p style={{ color: "var(--soft)", fontSize: 13, marginTop: 8 }}>Saving to GitHub…</p>}
-            {proposeError && <p style={{ color: "#c00", fontSize: 13, marginTop: 8 }}>{proposeError}</p>}
-          </>
-        ) : (
-          <>
-            <input
-              value={author}
-              onChange={(e) => setAuthor(e.target.value)}
-              placeholder="Your name"
-              style={{ marginBottom: 8, display: "block", width: "100%" }}
-            />
-            <textarea
-              value={contribution}
-              onChange={(e) => setContribution(e.target.value)}
-              placeholder="What should the team know? (e.g. 'We decided to pause X because…')"
-              rows={4}
-              style={{ display: "block", width: "100%", resize: "vertical", marginBottom: 8 }}
-            />
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                className="primary"
-                disabled={proposing || !contribution.trim() || !author.trim()}
-                onClick={handlePropose}
-              >
-                {proposing && <span className="spinner" />}
-                update context →
-              </button>
-              <div className="model-picker" style={{ fontSize: 11 }}>
-                <label>model</label>
-                <select value={distillModel} onChange={(e) => setDistillModel(e.target.value)}>
-                  {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              </div>
-            </div>
-            {proposeError && <p style={{ color: "#c00", fontSize: 13, marginTop: 8 }}>{proposeError}</p>}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── ProjectsPage ──────────────────────────────────────────────────────────────
 // The standalone app was one deployment pointed at one repository, so it never
 // drew a list of projects. This is the sidebar's own row, lifted into a column:
@@ -1694,6 +1401,9 @@ function RolePage({ slug }) {
 
 function ProjectsPage() {
   const [state, setState] = useState({ loading: true, projects: [], me: null, error: "" });
+  const [adding, setAdding] = useState(false);
+  const [slug, setSlug] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -1710,9 +1420,32 @@ function ProjectsPage() {
     })();
   }, []);
 
+  async function add(e) {
+    e.preventDefault();
+    if (!slug.trim()) return;
+    setBusy(true);
+    setState((prev) => ({ ...prev, error: "" }));
+    try {
+      const { project } = await addExistingProject(slug.trim());
+      setState((prev) => ({
+        ...prev,
+        projects: [...prev.projects.filter((p) => p.slug !== project.slug), project]
+          .sort((a, b) => a.slug.localeCompare(b.slug)),
+      }));
+      setSlug("");
+      setAdding(false);
+    } catch (err) {
+      setState((prev) => ({ ...prev, error: err.message || String(err) }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (state.loading) {
     return <div style={{ padding: 40, color: "var(--soft)" }}>Loading…</div>;
   }
+
+  const canCreate = !!state.me?.canCreate;
 
   return (
     <div className="app">
@@ -1720,15 +1453,18 @@ function ProjectsPage() {
         <h1>
           Your projects <span className="dim">— what you can open</span>
         </h1>
-        {state.me && <span className="sidebar-me">signed in as {state.me.name}</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {state.me && <span className="sidebar-me">signed in as {state.me.name}</span>}
+          <a className="btn" href="/settings">Settings</a>
+        </div>
       </header>
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "8px 20px 40px", width: "100%" }}>
         {state.error && <div className="error">Error: {state.error}</div>}
+
         <section className="card">
-          {state.projects.length === 0 && !state.error ? (
+          {state.projects.length === 0 ? (
             <div className="empty-state">
-              Nothing here yet. A project appears once you connect an assistant to it,
-              add a key to it, or lend it access.
+              Nothing here yet. Create one, or add a project you already have.
             </div>
           ) : (
             <div className="sidebar-list">
@@ -1747,9 +1483,42 @@ function ProjectsPage() {
               ))}
             </div>
           )}
+
+          <div className="actions" style={{ marginTop: 18, gap: ".75rem", flexWrap: "wrap" }}>
+            {canCreate && (
+              <a className="btn" href="/settings/new-project">Create a project</a>
+            )}
+            <button className="ghost" onClick={() => setAdding((v) => !v)}>
+              {adding ? "cancel" : "add one I already have"}
+            </button>
+          </div>
+
+          {adding && (
+            <form onSubmit={add} style={{ marginTop: 12 }}>
+              <label htmlFor="slug">Which repository holds it?</label>
+              <input
+                id="slug"
+                autoFocus
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="owner/repo"
+              />
+              <p className="muted" style={{ margin: "6px 0 0" }}>
+                Nothing is created and nothing is written. The address is remembered
+                once teamctx can see the project and confirm you can read it.
+              </p>
+              <button className="primary" type="submit" disabled={busy || !slug.trim()}>
+                {busy && <span className="spinner" />}
+                add
+              </button>
+            </form>
+          )}
         </section>
+
         <p className="muted" style={{ marginTop: 16 }}>
-          Keys, access and agents are set per project, from <a href="/settings">settings</a>.
+          {canCreate
+            ? "Keys, access and agents are set per project, from settings."
+            : "Signed in with Google: a project is created from a GitHub account, but you can open any you were invited to."}
         </p>
       </div>
     </div>
@@ -1771,8 +1540,10 @@ function usePathname() {
 export default function App() {
   const pathname = usePathname();
   if (pathname === "/projects") return <ProjectsPage />;
-  const role = pathname.match(/^\/project\/[^/]+\/[^/]+\/role\/([^/]+)$/);
-  if (role) return <RolePage slug={role[1]} />;
+  // A page per role came over with the interface, and every endpoint it spoke
+  // to belonged to the app it came from. What it showed — the role, the
+  // decisions that are yours, the copy button — is in the drawer beside the
+  // work, so it is not carried half-working while it waits to be rebuilt.
   return <MainApp />;
 }
 

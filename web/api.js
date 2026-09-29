@@ -76,3 +76,22 @@ export async function loadProjects() {
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
+
+export const askProject = ({ owner, repo, workstream, question, role }) =>
+  call({ owner, repo, action: 'ask', body: { workstream, question, role } });
+
+export const loadRole = ({ owner, repo, slug }) =>
+  call({ owner, repo, action: 'role', body: { slug } });
+
+/** Remember a project this person already has, once teamctx can see it. */
+export async function addExistingProject(project) {
+  const res = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new SignedOutError(data.signIn || '/signin');
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}

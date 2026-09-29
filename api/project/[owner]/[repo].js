@@ -1,7 +1,7 @@
 import { currentUser } from '../../../src/oauth/session.js';
 import {
   readWorkspace, proposeContribution, applyContribution, discardContribution,
-  approveQueued, rejectQueued, markTask,
+  approveQueued, rejectQueued, markTask, askProject, readRole,
 } from '../../../src/oauth/workspace.js';
 import { ProjectViewError } from '../../../src/oauth/project-view.js';
 import { ManagerGateError } from '../../../cli/commands/review.core.js';
@@ -42,6 +42,19 @@ const ACTIONS = {
       summary: String(body.summary || ''),
       operations: body.operations,
     });
+  },
+
+  async ask({ owner, repo, user, body }) {
+    const question = String(body?.question || '').trim();
+    if (!question) throw new BadRequest('Ask something.');
+    return askProject({
+      owner, repo, user, workstream: body.workstream, question, role: body.role || null,
+    });
+  },
+
+  async role({ owner, repo, user, body }) {
+    if (!body?.slug) throw new BadRequest('Which role?');
+    return readRole({ owner, repo, user, slug: String(body.slug) });
   },
 
   async approve({ owner, repo, user, body }) {
