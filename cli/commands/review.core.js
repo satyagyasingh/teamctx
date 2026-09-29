@@ -22,6 +22,10 @@ async function currentIdentity(config, teamctxDir, projectDir) {
   return { actor, displayName };
 }
 
+export class WorkstreamSelectionError extends Error {
+  constructor(msg) { super(msg); this.code = 'BAD_SELECTION'; }
+}
+
 export class ManagerGateError extends Error {
   constructor(config, { actor, displayName } = {}) {
     const manager = config.managerKey || config.manager;
@@ -90,6 +94,12 @@ export async function approveReview({ id, only = null, teamctxDir, projectDir, a
   // answer rather than a queue that never empties.
   const all = item.operations || [];
   const operations = Array.isArray(only) ? all.filter((_, i) => only.includes(i)) : all;
+  // An index naming nothing would close the contribution having landed none of
+  // it — a rejection wearing the word "approved", and the person who sent it
+  // told their work was taken.
+  if (Array.isArray(only) && operations.length === 0) {
+    throw new WorkstreamSelectionError(`none of ${JSON.stringify(only)} is a change in ${item.id}.`);
+  }
   const leftOut = all.length - operations.length;
 
   // `null` is the project itself. Defaulting to `main` here would have sent an

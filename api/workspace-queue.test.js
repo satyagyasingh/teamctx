@@ -83,12 +83,13 @@ function project() {
 async function call({ action, session, body }) {
   if (session) await kvSet(keys.session('s'), session);
   const req = {
+    method: body ? 'POST' : 'GET',
     query: { owner: 'acme', repo: 'ledger', ...(action ? { action } : {}) },
     headers: session ? { cookie: 'teamctx_sid=s' } : {},
     body,
   };
   let code = 200; let payload;
-  const res = { status(c) { code = c; return this; }, json(b) { payload = b; return this; } };
+  const res = { status(c) { code = c; return this; }, json(b) { payload = b; return this; }, setHeader() {} };
   await handler(req, res);
   return { status: code, body: payload };
 }

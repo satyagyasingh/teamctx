@@ -18,6 +18,17 @@ import { ManagerGateError } from '../../../cli/commands/review.core.js';
  * page the server renders.
  */
 
+/**
+ * What each action does, and how it may be asked for.
+ *
+ * Anything that writes is POST-only. A browser sends the session cookie with a
+ * top-level GET navigation, so a signed-in person following a link could
+ * otherwise be made to commit to their own repository without touching the page
+ * — `discard` needs no fields at all and would have appended an empty
+ * contribution.
+ */
+const WRITES = new Set(['propose', 'apply', 'discard', 'approve', 'reject', 'task', 'workstream']);
+
 const ACTIONS = {
   async bootstrap({ owner, repo, user }) {
     return readWorkspace({ owner, repo, user });
@@ -67,6 +78,9 @@ const ACTIONS = {
     if (!body?.id) throw new BadRequest('Which one?');
     // `only` is which of the changes to keep. Absent means all of them, which is
     // what approving from the terminal or an assistant has always meant.
+    // Checked against what is actually in the item further in; an index that
+    // names nothing would otherwise close the contribution having landed none
+    // of it, which is a rejection wearing the word "approved".
     const only = Array.isArray(body.only) ? body.only.map(Number).filter(n => Number.isInteger(n)) : null;
     if (only && only.length === 0) throw new BadRequest('Nothing is selected to approve.');
     return approveQueued({ owner, repo, user, id: String(body.id), only });
@@ -108,6 +122,10 @@ export default async function handler(req, res) {
 
   const run = ACTIONS[action];
   if (!run) return res.status(400).json({ error: `Unknown action "${action}".` });
+  if (WRITES.has(action) && req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: `"${action}" has to be asked for with POST.` });
+  }
 
   try {
     res.status(200).json(await run({ owner, repo, user, req, body: req.body }));
@@ -115,7 +133,7 @@ export default async function handler(req, res) {
     if (e instanceof BadRequest) return res.status(400).json({ error: e.message });
     // A name that is already taken, or produces no id at all, is something the
     // person can fix — reporting it as a server fault tells them to give up.
-    if (e.code === 'WORKSTREAM_SPLIT') return res.status(400).json({ error: e.message });
+    if (e.code === 'WORKSTREAM_SPLIT' || e.code === 'BAD_SELECTION') return res.status(400).json({ error: e.message });
     // The manager gate and the roster both refuse by throwing. Neither is a
     // fault in the request, so neither is reported as one — and neither is a
     // fault in the server, which is what a 500 would have said.

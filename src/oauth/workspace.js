@@ -205,6 +205,23 @@ async function withProjectAi({ owner, repo, user, actor }, fn) {
 }
 
 /**
+ * The part of the work this request names, once the roster has agreed to it.
+ *
+ * Every one of these takes its workstream from the request body, which is a
+ * claim and not a credential: the list of parts somebody is sent is filtered,
+ * but nothing stopped them naming a different one. Reading and asking checked
+ * it; contributing did not, so a member scoped to one strand could write to
+ * another — and be handed its tree and its history in the reply.
+ */
+function scoped(allowed, workstream) {
+  const target = toTarget(workstream);
+  if (!inScope(allowed, target)) {
+    throw new ProjectViewError('That is not a part of the work you are on.');
+  }
+  return target;
+}
+
+/**
  * One contribution, across two requests.
  *
  * The interface asks the model what a contribution means, shows the person the
@@ -215,11 +232,12 @@ async function withProjectAi({ owner, repo, user, actor }, fn) {
  * no trust that contributing any other way would not.
  */
 export async function proposeContribution({ owner, repo, user, workstream, text }) {
-  return openProject({ owner, repo, user }, async ({ actor, isManager }) => runWithActor(actor, () => withProjectAi({ owner, repo, user, actor }, async () => {
+  return openProject({ owner, repo, user }, async ({ actor, isManager, allowed }) => runWithActor(actor, () => withProjectAi({ owner, repo, user, actor }, async () => {
+    const target = scoped(allowed, workstream);
     let queues = false;
     const r = await contributeCore({
       text,
-      workstreamId: toTarget(workstream),
+      workstreamId: target,
       source: 'web',
       // Nothing is written in this half. The person has not seen it yet.
       onProposed: async (p) => { queues = p.willQueue; return false; },
@@ -236,10 +254,11 @@ export async function proposeContribution({ owner, repo, user, workstream, text 
 }
 
 export async function applyContribution({ owner, repo, user, workstream, text, summary, operations }) {
-  return openProject({ owner, repo, user }, async ({ actor, isManager, config }) => runWithActor(actor, async () => {
+  return openProject({ owner, repo, user }, async ({ actor, isManager, config, allowed }) => runWithActor(actor, async () => {
+    const target = scoped(allowed, workstream);
     const r = await contributeCore({
       text,
-      workstreamId: toTarget(workstream),
+      workstreamId: target,
       source: 'web',
       proposal: { summary, operations },
       // A manager approving their own proposal is approving it, not bypassing
@@ -253,8 +272,8 @@ export async function applyContribution({ owner, repo, user, workstream, text, s
       id: r.id,
       queued: r.mode === 'queued',
       needsReview: needsReview(config, operations || []),
-      workstream: readTree(toTarget(workstream)),
-      contributions: readContributions().filter(c => String(c.workstream ?? PROJECT_KEY) === String(toTarget(workstream) ?? PROJECT_KEY)),
+      workstream: readTree(target),
+      contributions: readContributions().filter(c => String(c.workstream ?? PROJECT_KEY) === String(target ?? PROJECT_KEY)),
       rolesRegenerated: r.rolesRegenerated || [],
     };
   }));
@@ -268,8 +287,8 @@ export async function applyContribution({ owner, repo, user, workstream, text, s
  * interface called this "reject (keep logged)" and it was right to.
  */
 export async function discardContribution({ owner, repo, user, workstream, text }) {
-  return openProject({ owner, repo, user }, async ({ actor }) => runWithActor(actor, async () => {
-    const target = toTarget(workstream);
+  return openProject({ owner, repo, user }, async ({ actor, allowed }) => runWithActor(actor, async () => {
+    const target = scoped(allowed, workstream);
     const contribution = {
       id: `web-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       ts: new Date().toISOString(),
@@ -327,7 +346,14 @@ export async function markTask({ owner, repo, user, id, status }) {
   return openProject({ owner, repo, user }, async ({ actor, allowed }) => runWithActor(actor, async () => {
     // Checked before it is written, not after: `setTaskStatus` commits, so a
     // refusal that came later would have already changed the repository.
-    const existing = getTask({ id });
+    let existing;
+    try {
+      existing = getTask({ id });
+    } catch {
+      // A stale id in a tab somebody left open. Nothing is wrong with the
+      // server, and saying so sends them looking in the wrong place.
+      throw new ProjectViewError(`There is no task called "${id}" in this project any more.`);
+    }
     if (!inScope(allowed, resolveTarget(existing.workstream))) {
       throw new ProjectViewError('That task is not in a part of the work you are on.');
     }

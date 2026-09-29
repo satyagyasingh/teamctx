@@ -249,6 +249,21 @@ app.get('/oauth/github/callback', async (req, res) => {
     if (error) return res.status(400).send(errorPage(`GitHub returned: ${error}`));
     try {
       const githubUser = await loginViaGithub(String(code), baseUrlFor(req));
+      // Where the session is made, not where settings happen to render.
+      //
+      // This is the one moment both the GitHub id and the address GitHub has
+      // verified for it are in hand, and it is what lets a later Google sign-in
+      // be recognised by a gate written as a GitHub id. It used to run only when
+      // somebody opened the settings page — and a sign-in that starts from a
+      // project goes straight back to the project, so the person most likely to
+      // need the link was the one least likely to write it.
+      if (githubUser.id && githubUser.email) {
+        try {
+          await adoptGithubRecords({
+            email: githubUser.email, githubId: githubUser.id, githubLogin: githubUser.login,
+          });
+        } catch { /* best effort: never block a sign-in on it */ }
+      }
       const sid = randomBytes(24).toString('base64url');
       await kvSet(keys.session(sid), githubUser, { ttlSeconds: TTL.session });
       res.setHeader('Set-Cookie',

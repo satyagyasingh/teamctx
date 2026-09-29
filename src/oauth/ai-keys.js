@@ -56,8 +56,11 @@ export async function writePersonalKey({ email, githubId, githubLogin, provider,
   // project quietly keeps calling a model with a key its owner has retired —
   // which reads as "the key works from my assistant but not from the website",
   // because those two resolve different records.
-  record.alsoUpdated = await rotateSharedKeys({ email, githubId, githubLogin, provider, apiKey });
-  return record;
+  const alsoUpdated = await rotateSharedKeys({ email, githubId, githubLogin, provider, apiKey });
+  // Returned beside the record rather than added to it: the in-memory store
+  // keeps what it was handed, so a field set afterwards would become part of
+  // the saved key everywhere but production.
+  return { ...record, alsoUpdated };
 }
 
 /**

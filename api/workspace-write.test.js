@@ -75,12 +75,13 @@ function project(config = CONFIG) {
 async function call({ action, session, body }) {
   if (session) await kvSet(keys.session('s'), session);
   const req = {
+    method: body ? 'POST' : 'GET',
     query: { owner: 'acme', repo: 'ledger', action },
     headers: session ? { cookie: 'teamctx_sid=s' } : {},
     body,
   };
   let code = 200; let payload;
-  const res = { status(c) { code = c; return this; }, json(b) { payload = b; return this; } };
+  const res = { status(c) { code = c; return this; }, json(b) { payload = b; return this; }, setHeader() {} };
   await handler(req, res);
   return { status: code, body: payload };
 }
@@ -207,5 +208,66 @@ describe('rejecting what was proposed', () => {
   it('commits it as logged, so it survives the session', async () => {
     await call({ action: 'discard', session: MANAGER, body: { workstream: 'product', text: 'x' } });
     expect(repo.commits.join(' ')).toMatch(/log: Maya contribution \(not applied\)/);
+  });
+});
+
+describe('a part of the work somebody is not on', () => {
+  const OUTSIDE = {
+    workstream: 'tech',
+    text: 'we settled on three tiers',
+    summary: 'records the pricing decision',
+    operations: [{ type: 'addWhy', text: 'tiers decided' }],
+  };
+
+  beforeEach(() => project({ ...CONFIG, workstreams: [{ id: 'product', name: 'Product' }, { id: 'tech', name: 'Tech' }] }));
+
+  it('cannot be contributed to by naming it in the request', async () => {
+    // The list of parts somebody is sent is filtered; the workstream in the body
+    // is a claim, and nothing checked it.
+    await lend();
+    const { status, body } = await call({ action: 'propose', session: MEMBER, body: { workstream: 'tech', text: 'x' } });
+    expect(status).toBe(403);
+    expect(body.error).toMatch(/not a part of the work you are on/);
+  });
+
+  it('cannot be written to by approving into it', async () => {
+    await lend();
+    const { status } = await call({ action: 'apply', session: MEMBER, body: OUTSIDE });
+    expect(status).toBe(403);
+    expect(repo.commits).toEqual([]);
+  });
+
+  it('does not hand back its tree and its history in the reply', async () => {
+    await lend();
+    const { body } = await call({ action: 'apply', session: MEMBER, body: OUTSIDE });
+    expect(JSON.stringify(body)).not.toContain('whys');
+  });
+
+  it('cannot be logged against by discarding into it', async () => {
+    await lend();
+    const { status } = await call({ action: 'discard', session: MEMBER, body: { workstream: 'tech', text: 'x' } });
+    expect(status).toBe(403);
+    expect(log()).toEqual([]);
+  });
+
+  it('is still open to the manager, who is on all of it', async () => {
+    const { status } = await call({ action: 'propose', session: MANAGER, body: { workstream: 'tech', text: 'x' } });
+    expect(status).toBe(200);
+  });
+});
+
+describe('how a write may be asked for', () => {
+  it('is refused as a plain link, which a browser can be sent to follow', async () => {
+    // A top-level navigation carries the session cookie, so a signed-in person
+    // could otherwise be made to commit to their own repository by a link.
+    await kvSet(keys.session('s'), MANAGER);
+    let code; let payload;
+    await handler(
+      { method: 'GET', query: { owner: 'acme', repo: 'ledger', action: 'discard' }, headers: { cookie: 'teamctx_sid=s' } },
+      { status(c) { code = c; return this; }, json(b) { payload = b; return this; }, setHeader() {} },
+    );
+    expect(code).toBe(405);
+    expect(payload.error).toMatch(/has to be asked for with POST/);
+    expect(log()).toEqual([]);
   });
 });

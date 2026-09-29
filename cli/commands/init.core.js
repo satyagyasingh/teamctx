@@ -142,7 +142,10 @@ export async function initProject({
       key: actor.key,
       name: me,
       email: managerEmail || (actor.key.startsWith('git:') ? actor.key.slice(4) : null),
-      login: actor.key.startsWith('github:') ? null : null,
+      // No login is passed to `init`, so there is none to record. Left out
+      // rather than written as null, which reads as "we looked and there wasn't
+      // one" — `member add` fills it in when somebody is invited by handle.
+
       workstreams: [],
     }],
     // A new project is its own base and has no strands yet. `main` used to be
