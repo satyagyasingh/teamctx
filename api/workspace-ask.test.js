@@ -18,6 +18,11 @@ vi.mock('../src/context.js', async (orig) => {
     answerQuestion: vi.fn(async (args) => {
       repo.asked = args;
       repo.keySeen = await getRequestAiKey();
+      if (args.question === 'refuse') {
+        const err = new Error('401 {"type":"error","error":{"type":"authentication_error","message":"API key is invalid."}}');
+        err.status = 401;
+        throw err;
+      }
       return 'because the tiers were agreed in June';
     }),
   };
@@ -159,5 +164,41 @@ describe('reading a role', () => {
     const { status, body } = await call({ action: 'role', session: MANAGER, body: { slug: 'nobody' } });
     expect(status).toBe(403);
     expect(body.error).toMatch(/no role called/);
+  });
+});
+
+describe('when the provider refuses the key', () => {
+  // The mocked call refuses when asked to, which is what a provider does with a
+  // key it does not accept — `keyWasRejected` reads the same shape either way.
+  const REFUSED = 'refuse';
+
+  it('says which key was refused, not what the provider replied', async () => {
+    // A raw `401 {"type":"error"...}` on a page tells nobody what to do about it.
+    await addProjectKey({ owner: 'acme', repo: 'ledger', email: 'maya@example.com', provider: 'anthropic', apiKey: 'sk-stale' });
+    const { status, body } = await call({
+      action: 'ask', session: MANAGER, body: { workstream: 'product', question: REFUSED },
+    });
+    expect(status).toBe(403);
+    expect(body.error).toMatch(/refused by the provider/);
+    expect(body.error).toMatch(/saved for this project/);
+  });
+
+  it('names your own key when that is the one it ran on', async () => {
+    await writePersonalKey({ email: 'maya@example.com', provider: 'anthropic', apiKey: 'sk-mine' });
+    const { body } = await call({
+      action: 'ask', session: MANAGER, body: { workstream: 'product', question: REFUSED },
+    });
+    expect(body.error).toMatch(/saved against your account/);
+  });
+
+  it('says so plainly when the project has no key of its own', async () => {
+    // With none stored anywhere, the call falls through to whatever key this
+    // deployment was started with — a key the reader has never seen and may not
+    // be able to change, which is what made the raw refusal so confusing.
+    const { body } = await call({
+      action: 'ask', session: MANAGER, body: { workstream: 'product', question: REFUSED },
+    });
+    expect(body.error).toMatch(/No AI key is set for acme\/ledger/);
+    expect(body.error).toMatch(/started with/);
   });
 });

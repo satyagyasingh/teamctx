@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { __resetMemory, kvSet, keys } from './kv.js';
-import { withSharedKey, primaryManagerKey } from '../../api/mcp/[owner]/[repo].js';
-import { addProjectKey, readProjectKeys } from './ai-keys.js';
+import { withSharedKey } from '../../api/mcp/[owner]/[repo].js';
+// `primaryManagerKey` moved here when the workspace needed it too: whose key
+// pays for a call is one answer, not one per caller.
+import { addProjectKey, readProjectKeys, primaryManagerKey } from './ai-keys.js';
 
 const OWNER = 'acme';
 const REPO = 'ledger';

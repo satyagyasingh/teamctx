@@ -1,8 +1,7 @@
 import { readConfig, readTree, readContributions, appendContribution, listTasks, readTreeMd, readRoleFile } from '../storage.js';
 import { answerQuestion } from '../context.js';
-import { runWithAiKey } from '../ai-context.js';
-import { readPersonalKey, readProjectKeys, pickProjectKey } from './ai-keys.js';
-import { managersOf } from '../managers.js';
+import { runWithAiKey, keyWasRejected } from '../ai-context.js';
+import { readPersonalKey, readProjectKeys, primaryManagerKey } from './ai-keys.js';
 import { commitContext } from '../git.js';
 import { runWithActor } from '../actor.js';
 import { contributeCore } from '../../cli/commands/contribute.core.js';
@@ -169,12 +168,37 @@ async function withProjectAi({ owner, repo, user, actor }, fn) {
   // Fetched here and picked later: the resolver runs synchronously, on first
   // use, so anything it needs from the network has to be in hand before it.
   const projectKeys = await readProjectKeys(owner, repo);
-  const projectKey = () => {
-    const picked = pickProjectKey({ projectKeys, primaryKey: managersOf(readConfig()).primary });
-    return picked ? { apiKey: picked.apiKey, provider: picked.provider } : null;
+  const projectKey = () => primaryManagerKey({ projectKeys, config: readConfig() });
+
+  // A provider refusing a key is not an error about the request, and reading a
+  // raw `401 {"type":"error"...}` on a page tells somebody nothing they can act
+  // on. It matters which key was refused, too: when a project has none of its
+  // own, every provider falls back to the key this deployment was started with,
+  // so the message that comes back is about a key the reader has never seen and
+  // may not be able to change.
+  const guard = async () => {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!keyWasRejected(err)) throw err;
+      const hasOwn = !!mine?.apiKey;
+      const hasProject = !!projectKey()?.apiKey;
+      if (hasOwn || hasProject) {
+        throw new ProjectViewError(
+          `The AI key this project runs on was refused by the provider. ${hasOwn && hasProject
+            ? 'Both your own key and the project key were tried.'
+            : hasOwn ? 'That is the key saved against your account.' : 'That is the key saved for this project.'} `
+          + 'Update it from the settings page.');
+      }
+      throw new ProjectViewError(
+        `No AI key is set for ${owner}/${repo}, so the call fell back to the key this deployment was `
+        + 'started with, and the provider refused it. Add a key for this project from the settings page, '
+        + 'or ask its manager to share theirs.');
+    }
   };
-  if (mine?.apiKey) return runWithAiKey(mine.apiKey, fn, mine.provider || null, null, { fallback: projectKey });
-  return runWithAiKey(null, fn, null, projectKey);
+
+  if (mine?.apiKey) return runWithAiKey(mine.apiKey, guard, mine.provider || null, null, { fallback: projectKey });
+  return runWithAiKey(null, guard, null, projectKey);
 }
 
 /**

@@ -3,10 +3,9 @@ import { runWithAiKey } from '../../../src/ai-context.js';
 import { runWithActor, actorFromGithubUser } from '../../../src/actor.js';
 import { providerFromEnv } from '../../../src/oauth/provider.js';
 import {
-  readPersonalKey, readProjectKeys, pickProjectKey, recordConnectedProject,
+  readPersonalKey, readProjectKeys, primaryManagerKey, recordConnectedProject,
 } from '../../../src/oauth/ai-keys.js';
 import { readConfig } from '../../../src/storage.js';
-import { managersOf } from '../../../src/managers.js';
 import { resolveGoogleMember } from '../../../src/oauth/member-access.js';
 import { primaryEmail } from '../../../src/oauth/github-identity.js';
 import {
@@ -65,19 +64,6 @@ export async function withSharedKey({ apiKey, aiProvider, owner, repo }) {
     // loaded: which key applies depends on who the primary manager is.
     resolve: () => primaryManagerKey({ projectKeys, config: readConfig() }),
   };
-}
-
-/**
- * The primary manager's project key, for a request that brought none.
- *
- * Exported for tests. The primary is `managerKey`, and a manager is identified by
- * email, so the key is looked up by that address. A project from before keys
- * were stored by email keeps running on its single shared record.
- */
-export function primaryManagerKey({ projectKeys, config }) {
-  const { primary } = managersOf(config || {});
-  const picked = pickProjectKey({ projectKeys, primaryKey: primary });
-  return picked ? { apiKey: picked.apiKey, provider: picked.provider } : null;
 }
 
 export default async function handler(req, res) {

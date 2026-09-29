@@ -1,4 +1,5 @@
 import { kvGet, kvSet, keys } from './kv.js';
+import { managersOf } from '../managers.js';
 
 /**
  * Where AI keys live on the hosted server, and which one a request runs on.
@@ -266,4 +267,21 @@ export async function projectsKnownFor(email) {
 export async function githubIdsFor(email) {
   if (!email) return [];
   return (await kvGet(keys.githubIdentities(norm(email))))?.ids || [];
+}
+
+/**
+ * The primary manager's project key, for a request that brought none.
+ *
+ * The primary is `managerKey`, and a manager is identified by email, so the key
+ * is looked up by that address. A project from before keys were stored by email
+ * keeps running on its single shared record.
+ *
+ * The connector and the workspace both ask this. It used to live inside the
+ * connector, where the workspace could only copy it — and a copy of "whose key
+ * pays for this" is a copy that can start charging somebody else.
+ */
+export function primaryManagerKey({ projectKeys, config }) {
+  const { primary } = managersOf(config || {});
+  const picked = pickProjectKey({ projectKeys, primaryKey: primary });
+  return picked ? { apiKey: picked.apiKey, provider: picked.provider } : null;
 }
