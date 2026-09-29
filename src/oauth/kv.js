@@ -257,6 +257,14 @@ export const keys = {
   agentDaily: (id, day) => `teamctx:agent:daily:${id}:${day}`,
   /** Browser session for the settings page. 1 hour. */
   session: sid => `teamctx:session:${sid}`,
+  /**
+   * What a project calls itself, so a list of them can say so.
+   *
+   * Cached because the name lives in the repository, and fetching one file per
+   * project every time somebody opens the list turns a page into a fan of
+   * GitHub calls. Short-lived: a renamed project should not stay wrong for long.
+   */
+  projectName: (owner, repo) => `teamctx:name:${slug(owner, repo)}`,
 };
 
 export const TTL = {
@@ -265,4 +273,5 @@ export const TTL = {
   accessToken: 60 * 60,      // 1 hour — Claude refreshes reactively on 401
   refreshToken: 90 * 24 * 60 * 60,
   session: 60 * 60,
+  projectName: 60 * 60,
 };

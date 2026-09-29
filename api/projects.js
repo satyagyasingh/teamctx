@@ -1,5 +1,5 @@
 import { currentUser } from '../src/oauth/session.js';
-import { kvGet, keys } from '../src/oauth/kv.js';
+import { kvGet, kvSet, keys, TTL } from '../src/oauth/kv.js';
 import { projectsKeyedBy, projectsKnownFor, recordConnectedProject } from '../src/oauth/ai-keys.js';
 import { readConfigJson } from '../src/oauth/member-access.js';
 
@@ -66,9 +66,32 @@ export default async function handler(req, res) {
     // A GitHub sign-in can make a repository; a Google one cannot, and the page
     // should not offer it something that ends in a refusal.
     me: { name: user.name || user.login || user.email || 'you', canCreate: !!user.token },
-    projects: slugs.map(slug => {
+    projects: await Promise.all(slugs.map(async (slug) => {
       const [owner, repo] = String(slug).split('/');
-      return { slug, owner, repo };
-    }),
+      return { slug, owner, repo, name: await projectName({ owner, repo, user }) };
+    })),
   });
+}
+
+/**
+ * What a project calls itself.
+ *
+ * A list of `owner/repo` is a list of repositories, and nobody thinks of their
+ * work that way — the name the manager gave it is in the project, so this goes
+ * and gets it. Cached for an hour, and a project that cannot be read right now
+ * simply goes unnamed rather than holding up the page.
+ */
+async function projectName({ owner, repo, user }) {
+  const cached = await kvGet(keys.projectName(owner, repo));
+  if (cached?.name !== undefined) return cached.name;
+  const token = user.token || (await kvGet(keys.projectGhCred(owner, repo)))?.token;
+  if (!token) return null;
+  try {
+    const config = await readConfigJson({ owner, repo, token });
+    const name = config?.project || null;
+    await kvSet(keys.projectName(owner, repo), { name }, { ttlSeconds: TTL.projectName });
+    return name;
+  } catch {
+    return null;
+  }
 }

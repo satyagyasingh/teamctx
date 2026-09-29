@@ -1601,9 +1601,16 @@ function ProjectsPage() {
                   href={`/project/${p.owner}/${p.repo}`}
                   style={{ display: "block", textDecoration: "none", color: "inherit" }}
                 >
+                  {/* What the manager called it, not the repository it sits in:
+                      a list of owner/repo is a list of repositories, and nobody
+                      thinks of their work that way. */}
                   <div className="ws-item-row">
-                    <span>{p.repo}</span>
-                    <span className="counts">{p.owner}</span>
+                    <span>{p.name || p.repo}</span>
+                  </div>
+                  <div className="ws-item-team">
+                    <span className="team-chip" style={{ fontFamily: "var(--font-mono)" }}>
+                      {p.owner}/{p.repo}
+                    </span>
                   </div>
                 </a>
               ))}

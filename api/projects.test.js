@@ -50,7 +50,22 @@ describe('listing what somebody can open', () => {
   it('splits each one into the owner and repo the address needs', async () => {
     await kvSet(keys.connectedProjects('maya@example.com'), { projects: ['acme/ledger'] });
     const { body } = await call({ session: USER });
-    expect(body.projects[0]).toEqual({ slug: 'acme/ledger', owner: 'acme', repo: 'ledger' });
+    expect(body.projects[0]).toMatchObject({ slug: 'acme/ledger', owner: 'acme', repo: 'ledger' });
+  });
+
+  it('carries what the project calls itself, so the list is not a list of repositories', async () => {
+    await kvSet(keys.connectedProjects('maya@example.com'), { projects: ['acme/ledger'] });
+    await kvSet(keys.projectName('acme', 'ledger'), { name: 'Ledger' });
+    expect((await call({ session: USER })).body.projects[0].name).toBe('Ledger');
+  });
+
+  it('leaves one it cannot read right now unnamed, rather than holding up the page', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })));
+    await kvSet(keys.connectedProjects('maya@example.com'), { projects: ['acme/ledger'] });
+    const { status, body } = await call({ session: USER });
+    expect(status).toBe(200);
+    expect(body.projects[0]).toMatchObject({ slug: 'acme/ledger', name: null });
+    vi.unstubAllGlobals();
   });
 
   it('carries who is asking, so the page can say it', async () => {
