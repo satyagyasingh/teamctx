@@ -266,11 +266,34 @@ function OpCard({ op, workstream, picked = null, onPick = null }) {
  * people came to do was below the fold. It is one line now, and opens an item at
  * a time.
  */
-function PendingQueue({ items, workstream, onApprove, onReject }) {
+function PendingQueue({ items, elsewhere = 0, waiting = null, isManager = true, workstream, onApprove, onReject }) {
   const [openId, setOpenId] = useState(null);
   const [picked, setPicked] = useState({});
 
-  if (!items.length) return null;
+  // Not yours to clear: you are told it exists and who it waits on, and no more
+  // than that. Without this the queue simply was not there, which reads as work
+  // having gone missing.
+  if (!isManager) {
+    if (!waiting?.total) return null;
+    return (
+      <section className="block">
+        <p className="muted" style={{ margin: 0 }}>
+          {waiting.total} change{waiting.total === 1 ? "" : "s"} sent for review, waiting on {waiting.managerName}.
+        </p>
+      </section>
+    );
+  }
+
+  if (!items.length) {
+    if (!elsewhere) return null;
+    return (
+      <section className="block">
+        <p className="muted" style={{ margin: 0 }}>
+          {elsewhere} change{elsewhere === 1 ? "" : "s"} waiting on you in another part of the work.
+        </p>
+      </section>
+    );
+  }
   const open = items.find((q) => q.id === openId) || null;
 
   const pickedFor = (q) => picked[q.id]
@@ -282,6 +305,9 @@ function PendingQueue({ items, workstream, onApprove, onReject }) {
         <span className="section-title" style={{ margin: 0 }}>
           Waiting on you · {items.length}
         </span>
+        {elsewhere > 0 && (
+          <span className="muted">and {elsewhere} in another part of the work</span>
+        )}
       </div>
       <div className="log">
         {items.map((q) => {
@@ -761,6 +787,7 @@ function MainApp() {
   const [notice, setNotice] = useState("");
   const [tasks, setTasks] = useState([]);
   const [pending, setPending] = useState([]);
+  const [waiting, setWaiting] = useState(null);
   const [project, setProject] = useState(null);
 
   const [distillModel, setDistillModel] = useState(DEFAULT_DISTILL_MODEL);
@@ -932,6 +959,7 @@ function MainApp() {
         setContributions(data.contributions);
         setTasks(data.tasks || []);
         setPending(data.pending || []);
+        setWaiting(data.waiting || null);
         setSelectedId(data.workstreams[0]?.id ?? null);
         setMe(data.me.name);
         setMyRole(data.me.role || (data.me.isManager ? "admin" : ""));
@@ -1143,6 +1171,9 @@ function MainApp() {
               })()}
               <PendingQueue
                 items={pending.filter((q) => q.workstream === current.id)}
+                elsewhere={pending.filter((q) => q.workstream !== current.id).length}
+                waiting={waiting}
+                isManager={myRole === "admin"}
                 workstream={current}
                 onApprove={approveQueuedItem}
                 onReject={rejectQueuedItem}

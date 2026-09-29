@@ -252,3 +252,28 @@ describe('approving part of what was sent', () => {
     expect(status).toBe(400);
   });
 });
+
+describe('knowing that work is waiting', () => {
+  it('tells everybody there is something, and who it waits on', async () => {
+    // Not theirs to clear, but a queue that is there on one sign-in and gone on
+    // the next reads as work having gone missing.
+    await lend();
+    const { body } = await call({ session: MEMBER });
+    expect(body.pending).toEqual([]);
+    expect(body.waiting).toMatchObject({ total: 1 });
+    expect(body.waiting.managerName).toBeTruthy();
+  });
+
+  it('gives the contents only to the person who can clear it', async () => {
+    await lend();
+    const { body } = await call({ session: MEMBER });
+    expect(JSON.stringify(body)).not.toContain('records the pricing decision');
+  });
+
+  it('counts what is waiting across the whole project, not only what is on screen', async () => {
+    repo.files.set('.teamctx/queue/c-8.json', JSON.stringify({ ...QUEUED, id: 'c-8', workstream: 'tech' }));
+    const { body } = await call({ session: MANAGER });
+    expect(body.waiting.total).toBe(2);
+    expect(body.pending).toHaveLength(2);
+  });
+});

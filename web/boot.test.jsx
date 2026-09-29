@@ -246,3 +246,30 @@ describe('the review queue on the page', () => {
     expect(sent).toMatchObject({ id: 'c-9', only: [0] });
   });
 });
+
+describe('when the queue is not yours', () => {
+  const answerWith = (status, body) => vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: status === 200, status, json: async () => body,
+  })));
+
+  it('says work is waiting and who has it, rather than showing nothing', async () => {
+    answerWith(200, {
+      ...PAYLOAD,
+      me: { name: 'Priya', role: 'pm', isManager: false },
+      pending: [],
+      waiting: { total: 2, managerName: 'Maya' },
+    });
+    await mount();
+    expect(container.textContent).toMatch(/2 changes sent for review, waiting on Maya/);
+  });
+
+  it('tells a manager when what is waiting is on another part of the work', async () => {
+    answerWith(200, {
+      ...PAYLOAD,
+      pending: [{ id: 'c-1', author: 'Priya', summary: 's', text: '', workstream: 'product', operations: [] }],
+      waiting: { total: 1, managerName: 'Maya' },
+    });
+    await mount();
+    expect(container.textContent).toMatch(/1 change waiting on you in another part of the work/);
+  });
+});

@@ -11,6 +11,7 @@ import { listMembers } from '../../cli/commands/member.core.js';
 import { listPendingReviews, approveReview, rejectReview } from '../../cli/commands/review.core.js';
 import { setTaskStatus, getTask } from '../../cli/commands/task.core.js';
 import { inScope } from '../member-scope.js';
+import { managerKeys } from '../review.js';
 import { PROJECT_LEVEL, isProjectLevel, resolveTarget } from '../project-level.js';
 import { flattenStatements } from '../ops.js';
 import { openProject, ProjectViewError } from './project-view.js';
@@ -116,11 +117,22 @@ export async function readWorkspace({ owner, repo, user }) {
       }));
 
     // The queue is the manager's to clear, so only they are sent what is in it.
-    const pending = isManager ? (await listPendingReviews({})).map(queuedItem) : [];
+    const queue = (await listPendingReviews({})).map(queuedItem);
+    // Everybody is told there is work waiting and who it waits on; only the
+    // person who can clear it is given what is in it. Silence was worse than
+    // either: a queue that is there on one sign-in and gone on the next, with
+    // nothing on the page to say it moved rather than vanished.
+    const pending = isManager ? queue : [];
+    const gate = managerKeys(config)[0] || null;
+    const managerName = (config.members || []).find(m => m.key === gate)?.name
+      || (gate?.startsWith('git:') ? gate.slice(4) : null)
+      || config.me
+      || 'the manager';
 
     return {
       tasks,
       pending,
+      waiting: { total: queue.length, managerName },
       me: {
         name: actor.name || actor.email || 'you',
         role: roleFor(config, actor, isManager),
