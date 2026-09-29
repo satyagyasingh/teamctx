@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { applyOps } from "./ops.js";
 import { DEFAULT_ASK_MODEL, DEFAULT_DISTILL_MODEL, MODELS } from "./ai.js";
 import {
   SignedOutError,
@@ -1076,8 +1075,10 @@ function MainApp() {
             )}
             {workstreams.map((w) => {
               const list = contributions[w.id] || [];
-              const merged = list.filter((c) => c.status === "merged").length;
-              const members = [...new Set(list.map((c) => c.author).filter(Boolean))];
+              // Who is on this part of the work is the roster's answer, not a
+              // list of whoever has contributed: somebody added yesterday
+              // belongs here before they have written anything.
+              const members = w.members || [];
               return (
                 <div
                   key={w.id}
@@ -1100,7 +1101,7 @@ function MainApp() {
                     <span className="counts">
                       {pending.filter((q) => q.workstream === w.id).length > 0
                         && `${pending.filter((q) => q.workstream === w.id).length} waiting · `}
-                      {merged}·{list.length}
+                      {list.length}
                     </span>
                   </div>
                   {members.length > 0 && (
@@ -1169,12 +1170,14 @@ function MainApp() {
             <>
               {(() => {
                 const list = contributions[current.id] || [];
-                const merged = list.filter((c) => c.status === "merged").length;
+                // teamctx logs a contribution and then lands it; nothing ever
+                // marks one "merged", so a merged count could only ever read
+                // zero next to a project with hundreds of them.
                 return (
                   <div className="ws-title">
                     <h2>{current.name}</h2>
                     <span className="counts">
-                      {merged} merged · {list.length} total
+                      {list.length} contribution{list.length === 1 ? "" : "s"}
                     </span>
                   </div>
                 );
@@ -1589,76 +1592,64 @@ function ProjectsPage() {
         <h1>
           Your projects <span className="dim">— what you can open</span>
         </h1>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {state.me && <span className="sidebar-me">signed in as {state.me.name}</span>}
-          <a className="btn" href="/settings">Settings</a>
-        </div>
+        {state.me && <span className="sidebar-me">signed in as {state.me.name}</span>}
       </header>
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "8px 20px 40px", width: "100%" }}>
+      <div className="projects-body">
         {state.error && <div className="error">Error: {state.error}</div>}
 
-        <section className="card">
-          {state.projects.length === 0 ? (
-            <div className="empty-state">
-              Nothing here yet. Create one, or add a project you already have.
-            </div>
-          ) : (
-            <div className="sidebar-list">
-              {state.projects.map((p) => (
-                <a
-                  key={p.slug}
-                  className="ws-item"
-                  href={`/project/${p.owner}/${p.repo}`}
-                  style={{ display: "block", textDecoration: "none", color: "inherit" }}
-                >
+        {state.projects.length === 0 ? (
+          <div className="projects-empty">
+            Nothing here yet. Create a project, or add one you already have.
+          </div>
+        ) : (
+          <div className="project-list">
+            {state.projects.map((p) => (
+              <a key={p.slug} className="project-card" href={`/project/${p.owner}/${p.repo}`}>
+                <div>
                   {/* What the manager called it, not the repository it sits in:
                       a list of owner/repo is a list of repositories, and nobody
                       thinks of their work that way. */}
-                  <div className="ws-item-row">
-                    <span>{p.name || p.repo}</span>
-                  </div>
-                  <div className="ws-item-team">
-                    <span className="team-chip" style={{ fontFamily: "var(--font-mono)" }}>
-                      {p.owner}/{p.repo}
-                    </span>
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-
-          <div className="actions" style={{ marginTop: 18, gap: ".75rem", flexWrap: "wrap" }}>
-            {canCreate && (
-              <a className="btn" href="/settings/new-project">Create a project</a>
-            )}
-            <button className="ghost" onClick={() => setAdding((v) => !v)}>
-              {adding ? "cancel" : "add one I already have"}
-            </button>
+                  <div className="project-name">{p.name || p.repo}</div>
+                  <div className="project-slug">{p.owner}/{p.repo}</div>
+                </div>
+                <span className="project-go" aria-hidden="true">→</span>
+              </a>
+            ))}
           </div>
+        )}
 
-          {adding && (
-            <form onSubmit={add} style={{ marginTop: 12 }}>
-              <label htmlFor="slug">Which repository holds it?</label>
-              <input
-                id="slug"
-                autoFocus
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="owner/repo"
-              />
-              <p className="muted" style={{ margin: "6px 0 0" }}>
-                Nothing is created and nothing is written. The address is remembered
-                once teamctx can see the project and confirm you can read it.
-              </p>
-              <button className="primary" type="submit" disabled={busy || !slug.trim()}>
-                {busy && <span className="spinner" />}
-                add
-              </button>
-            </form>
+        <div className="projects-actions">
+          {canCreate && (
+            <a className="link-button primary" href="/settings/new-project">Create a project</a>
           )}
-        </section>
+          <button onClick={() => setAdding((v) => !v)}>
+            {adding ? "Cancel" : "Add one you already have"}
+          </button>
+          <a className="link-button" href="/settings" style={{ marginLeft: "auto" }}>Settings</a>
+        </div>
 
-        <p className="muted" style={{ marginTop: 16 }}>
+        {adding && (
+          <form className="project-add" onSubmit={add}>
+            <label htmlFor="slug">Which repository holds it?</label>
+            <input
+              id="slug"
+              autoFocus
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="owner/repo"
+            />
+            <p className="muted" style={{ margin: "8px 0 0" }}>
+              Nothing is created and nothing is written. The address is remembered
+              once teamctx can see the project and confirm you can read it.
+            </p>
+            <button className="primary" type="submit" disabled={busy || !slug.trim()}>
+              {busy && <span className="spinner" />}
+              Add it
+            </button>
+          </form>
+        )}
+
+        <p className="muted" style={{ marginTop: 20 }}>
           {canCreate
             ? "Keys, access and agents are set per project, from settings."
             : "Signed in with Google: a project is created from a GitHub account, but you can open any you were invited to."}

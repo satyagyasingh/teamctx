@@ -966,3 +966,72 @@ section.block {
 .staleness-alert button:hover {
   color: var(--ink);
 }
+
+/* ── The projects screen ──────────────────────────────────────────────────────
+   The standalone app was one deployment pointed at one repository, so it never
+   drew this. The first attempt borrowed the sidebar's `ws-item`, which is
+   declared under `aside.sidebar` and therefore styled nothing out here: rows of
+   bare text, and an "add" that read as a sentence rather than a button. */
+
+.projects-body { width: 100%; max-width: 720px; margin: 0 auto; padding: 4px 20px 48px; }
+
+.project-list { display: grid; gap: 10px; }
+
+.project-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.project-card:hover { border-color: var(--accent); background: #fff; }
+.project-card .project-name { font-family: var(--font-display); font-size: 17px; line-height: 1.3; }
+.project-card .project-slug {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--faint);
+  margin-top: 3px;
+}
+/* An arrow, so a row reads as somewhere to go rather than something to read. */
+.project-card .project-go { margin-left: auto; color: var(--faint); font-size: 18px; }
+.project-card:hover .project-go { color: var(--accent); }
+
+.projects-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+
+/* An anchor that does what a button does should look like one. */
+.link-button {
+  display: inline-block;
+  font-size: 14px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  text-decoration: none;
+}
+.link-button:hover { border-color: var(--ink); }
+.link-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.link-button.primary:hover { background: #195a4a; }
+
+.project-add {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-top: 12px;
+}
+.project-add input { margin-top: 4px; }
+
+.projects-empty {
+  background: var(--card);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--soft);
+}

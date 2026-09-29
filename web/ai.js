@@ -7,7 +7,6 @@
 // tried to read as JSON.
 // (the Vercel serverless proxy that holds ANTHROPIC_API_KEY).
 
-import { jsonrepair } from "jsonrepair";
 
 export const MODELS = [
   { id: "claude-opus-4-8", label: "Opus 4.8 — sharpest" },

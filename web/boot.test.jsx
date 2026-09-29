@@ -273,3 +273,58 @@ describe('when the queue is not yours', () => {
     expect(container.textContent).toMatch(/1 change waiting on you in another part of the work/);
   });
 });
+
+describe('the projects screen', () => {
+  const PROJECTS = {
+    me: { name: 'Maya', canCreate: true },
+    projects: [
+      { slug: 'acme/ledger', owner: 'acme', repo: 'ledger', name: 'Ledger' },
+      { slug: 'acme/atlas', owner: 'acme', repo: 'atlas', name: null },
+    ],
+  };
+
+  const answerWith = (body) => vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: true, status: 200, json: async () => body,
+  })));
+
+  it('draws each project as something you can click, not a line of text', async () => {
+    // The first attempt borrowed the sidebar's row, which is declared under
+    // `aside.sidebar` and so styled nothing out here.
+    answerWith(PROJECTS);
+    await mount('/projects');
+    const cards = container.querySelectorAll('a.project-card');
+    expect(cards).toHaveLength(2);
+    expect(cards[0].getAttribute('href')).toBe('/project/acme/ledger');
+    expect(cards[0].textContent).toContain('Ledger');
+    expect(cards[0].textContent).toContain('acme/ledger');
+  });
+
+  it('falls back to the repository name when the project has not been read yet', async () => {
+    answerWith(PROJECTS);
+    await mount('/projects');
+    expect(container.querySelectorAll('.project-name')[1].textContent).toBe('atlas');
+  });
+
+  it('makes both ways of adding a project look like the buttons they are', async () => {
+    answerWith(PROJECTS);
+    await mount('/projects');
+    const create = container.querySelector('a.link-button.primary');
+    expect(create.getAttribute('href')).toBe('/settings/new-project');
+    const add = [...container.querySelectorAll('button')].find(b => /Add one you already have/.test(b.textContent));
+    expect(add).toBeTruthy();
+    expect(add.className).not.toContain('ghost');
+  });
+
+  it('does not offer to create one where creating is not possible', async () => {
+    answerWith({ ...PROJECTS, me: { name: 'Priya', canCreate: false } });
+    await mount('/projects');
+    expect(container.querySelector('a.link-button.primary')).toBe(null);
+    expect(container.textContent).toMatch(/a project is created from a GitHub account/);
+  });
+
+  it('says so plainly when there is nothing to open', async () => {
+    answerWith({ ...PROJECTS, projects: [] });
+    await mount('/projects');
+    expect(container.querySelector('.projects-empty')).toBeTruthy();
+  });
+});
