@@ -353,6 +353,7 @@ async function renderSettings(req, res, user, { newAgent = null } = {}) {
   res.send(settingsPage({
     user, hasKey: !!existing, shared, lent, repos, agents, newAgent,
     saved: req.query.saved === '1',
+    rotated: req.query.rotated ? String(req.query.rotated).split(',').filter(Boolean) : [],
     error: req.query.error ? String(req.query.error) : null,
     confirmRemove: req.query.confirmRemove ? String(req.query.confirmRemove) : null,
   }));
@@ -626,8 +627,16 @@ app.post('/settings', async (req, res) => {
   if (!apiKey) {
     return res.status(400).send(errorPage('Paste a key, or leave the page.'));
   }
-  await writePersonalKey({ email: user.email, githubId: user.id, provider: provider_, apiKey });
-  res.redirect(303, '/settings?saved=1');
+  const saved = await writePersonalKey({
+    email: user.email, githubId: user.id, githubLogin: user.login, provider: provider_, apiKey,
+  });
+  // Said out loud rather than done quietly: replacing your key also replaces
+  // the copy every project you shared it with is running on, and somebody who
+  // is not told will keep debugging a key they think they already changed.
+  const also = saved?.alsoUpdated || [];
+  res.redirect(303, also.length
+    ? `/settings?saved=1&rotated=${encodeURIComponent(also.join(','))}`
+    : '/settings?saved=1');
 });
 
 /**
@@ -1178,11 +1187,14 @@ tr:last-child td{border-bottom:0}
 </style></head><body${wide ? ' class="wide"' : ''}>${body}</body></html>`;
 
 const settingsPage = ({
-  user, hasKey, saved, error, confirmRemove = null, shared = [], lent = [], repos = [], agents = [], newAgent = null,
+  user, hasKey, saved, error, confirmRemove = null, shared = [], lent = [], repos = [], agents = [],
+  newAgent = null, rotated = [],
 }) => shell('Settings', `
 ${navBar({ user, current: '/settings' })}
 <h1>Settings</h1>
 ${saved ? '<div class="ok">Saved.</div>' : ''}
+${rotated.length ? `<div class="ok">The projects you had shared your old key with are now on the new one:
+${rotated.map(esc).join(', ')}. Nothing else about them changed.</div>` : ''}
 ${error ? `<div class="bad">${esc(error)}</div>` : ''}
 ${confirmRemove ? `<div class="bad">
 <p><strong>${esc(confirmRemove)} runs on this key.</strong> You are its primary manager, so

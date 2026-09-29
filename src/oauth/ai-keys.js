@@ -42,7 +42,7 @@ export async function readPersonalKey({ email, githubId } = {}) {
  * Clearing removes the GitHub-id record too. Otherwise a person who cleared
  * their key would find the old one quietly reappearing from the fallback.
  */
-export async function writePersonalKey({ email, githubId, provider, apiKey } = {}) {
+export async function writePersonalKey({ email, githubId, githubLogin, provider, apiKey } = {}) {
   if (!email) throw new Error('a verified email address is required to save a key');
   if (!apiKey) {
     await kvSet(keys.personalAiKey(norm(email)), { cleared: true, clearedAt: new Date().toISOString() });
@@ -51,7 +51,43 @@ export async function writePersonalKey({ email, githubId, provider, apiKey } = {
   }
   const record = { provider: provider || 'anthropic', apiKey };
   await kvSet(keys.personalAiKey(norm(email)), record);
+  // Every project this person has shared *their* key with is running on the key
+  // they had at the time. Replacing it here and leaving those behind means a
+  // project quietly keeps calling a model with a key its owner has retired —
+  // which reads as "the key works from my assistant but not from the website",
+  // because those two resolve different records.
+  record.alsoUpdated = await rotateSharedKeys({ email, githubId, githubLogin, provider, apiKey });
   return record;
+}
+
+/**
+ * Carry a replaced key into the projects it was shared with.
+ *
+ * Only this person's own entries: a project key belongs to whoever added it, and
+ * nobody else's is touched. Returns what changed, so it can be said out loud
+ * rather than happening behind somebody's back.
+ */
+export async function rotateSharedKeys({ email, githubId, githubLogin, provider, apiKey } = {}) {
+  const who = norm(email);
+  const updated = [];
+  for (const slug of (await kvGet(keys.keysAddedBy(who)))?.projects || []) {
+    const [owner, repo] = String(slug).split('/');
+    if (!owner || !repo) continue;
+    const record = await kvGet(keys.projectAiKeys(owner, repo));
+    const existing = record?.keys?.[who];
+    if (!existing || existing.apiKey === apiKey) continue;
+    record.keys[who] = {
+      ...existing,
+      provider: provider || existing.provider || 'anthropic',
+      apiKey,
+      updatedAt: new Date().toISOString(),
+      ...(githubId ? { addedById: String(githubId) } : {}),
+      ...(githubLogin ? { addedByLogin: String(githubLogin) } : {}),
+    };
+    await kvSet(keys.projectAiKeys(owner, repo), record);
+    updated.push(slug);
+  }
+  return updated;
 }
 
 // ---- keys added to a project -------------------------------------------
