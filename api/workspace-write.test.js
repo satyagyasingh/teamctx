@@ -271,3 +271,38 @@ describe('how a write may be asked for', () => {
     expect(log()).toEqual([]);
   });
 });
+
+describe('why a contribution goes to review', () => {
+  beforeEach(() => lend());
+
+  it('says it is the project, when the project reviews everything', async () => {
+    const { body } = await call({
+      action: 'propose', session: MEMBER, body: { workstream: 'product', text: 'x' },
+    });
+    expect(body.policy).toBe('all');
+    expect(body.queueReason).toBe('policy');
+  });
+
+  it('says it is the change, when the project only reviews what can lose something', async () => {
+    project({ ...CONFIG, reviewPolicy: 'additive' });
+    const { updateShared } = await import('../src/context.js');
+    updateShared.mockResolvedValueOnce({
+      workstream: { whys: [] },
+      summary: 'removes the old tiers',
+      operations: [{ type: 'deleteStatement', id: 'w1' }],
+    });
+    const { body } = await call({
+      action: 'propose', session: MEMBER, body: { workstream: 'product', text: 'drop it' },
+    });
+    expect(body.queueReason).toBe('destructive');
+  });
+
+  it('asks for nothing when the change only adds and the project allows that', async () => {
+    project({ ...CONFIG, reviewPolicy: 'additive' });
+    const { body } = await call({
+      action: 'propose', session: MEMBER, body: { workstream: 'product', text: 'x' },
+    });
+    expect(body.willQueue).toBe(false);
+    expect(body.queueReason).toBe(null);
+  });
+});

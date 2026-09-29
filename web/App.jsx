@@ -367,24 +367,46 @@ function ProposalReview({
   proposal, workstream, onApprove, onReject,
   heading = "Proposed change", approveLabel = null, rejectLabel = "reject (keep logged)",
 }) {
+  const all = proposal.operations || [];
+  // Each change is its own decision. Taking all of them or none is the choice
+  // somebody makes when five are right and one is wrong, and it is not the one
+  // they wanted — so the ones left unticked are simply not applied.
+  const [picked, setPicked] = useState(() => all.map((op, i) => (op.gone ? null : i)).filter(i => i !== null));
+  const keep = all.filter((_, i) => picked.includes(i));
+
   return (
     <div className="proposal">
       <h3>{heading}</h3>
       <div className="summary">{proposal.summary}</div>
       <div>
-        {(proposal.operations || []).map((op, i) => (
-          <OpCard key={i} op={op} workstream={workstream} />
+        {all.map((op, i) => (
+          <OpCard
+            key={i}
+            op={op}
+            workstream={workstream}
+            picked={picked.includes(i)}
+            onPick={() => setPicked(prev => (prev.includes(i) ? prev.filter(k => k !== i) : [...prev, i]))}
+          />
         ))}
       </div>
       <div className="proposal-actions">
-        <button className="primary" onClick={onApprove}>
-          {approveLabel || (proposal.willQueue ? "send for review" : "approve & merge")}
+        <button className="primary" disabled={keep.length === 0} onClick={() => onApprove(keep)}>
+          {approveLabel || (proposal.willQueue ? "send for review" : "apply")}
+          {keep.length !== all.length ? ` ${keep.length} of ${all.length}` : ""}
         </button>
         <button onClick={onReject}>{rejectLabel}</button>
       </div>
+      {keep.length < all.length && (
+        <p className="muted" style={{ margin: "8px 0 0", fontSize: 13 }}>
+          {all.length - keep.length} left out. Untick a change to drop it; the
+          contribution itself stays on the record either way.
+        </p>
+      )}
       {proposal.willQueue && (
         <p className="muted" style={{ margin: "8px 0 0", fontSize: 13 }}>
-          This project reviews changes like these. Your manager sees it next.
+          {proposal.queueReason === "destructive"
+            ? "This one removes or rewrites something already there, so it goes to your manager. Adding on its own would land straight away."
+            : "This project reviews every change before it lands. Your manager sees it next."}
         </p>
       )}
     </div>
@@ -824,6 +846,8 @@ function MainApp() {
         summary: r.summary,
         operations: r.operations,
         willQueue: r.willQueue,
+        // Why it is going to review, not only that it is.
+        queueReason: r.queueReason,
       });
     } catch (err) {
       setError(errorText(err));
@@ -832,9 +856,10 @@ function MainApp() {
     }
   }
 
-  async function approveProposal() {
+  async function approveProposal(keep = null) {
     if (!pendingProposal) return;
-    const { workstreamId, text, summary, operations } = pendingProposal;
+    const { workstreamId, text, summary } = pendingProposal;
+    const operations = keep || pendingProposal.operations;
     setBusy({ workstreamId, kind: "propose" });
     setError("");
     try {

@@ -328,3 +328,80 @@ describe('the projects screen', () => {
     expect(container.querySelector('.projects-empty')).toBeTruthy();
   });
 });
+
+describe('deciding on a proposal one change at a time', () => {
+  const THREE = {
+    summary: 'records the pricing decision',
+    operations: [
+      { type: 'addWhy', text: 'first' },
+      { type: 'addWhy', text: 'second' },
+      { type: 'addWhy', text: 'third' },
+    ],
+    willQueue: false,
+  };
+
+  const answers = (...bodies) => {
+    const queue = [...bodies];
+    return vi.stubGlobal('fetch', vi.fn(async () => {
+      const next = queue.shift();
+      return { ok: next.status === 200, status: next.status, json: async () => next.body };
+    }));
+  };
+
+  const type = async (text) => {
+    const box = container.querySelector('.contribute textarea');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set.call(box, text);
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const submit = [...container.querySelectorAll('.contribute button')].find(b => b.textContent.includes('update context'));
+    await act(async () => submit.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  };
+
+  it('applies only the changes still ticked', async () => {
+    answers(
+      { status: 200, body: PAYLOAD },
+      { status: 200, body: THREE },
+      { status: 200, body: { mode: 'applied', workstream: { whys: [] }, contributions: [] } },
+    );
+    await mount();
+    await type('we settled on three tiers');
+    const boxes = container.querySelectorAll('.proposal .op-card input[type=checkbox]');
+    expect(boxes).toHaveLength(3);
+    await act(async () => boxes[1].click());
+    const approve = container.querySelectorAll('.proposal-actions button')[0];
+    expect(approve.textContent).toMatch(/2 of 3/);
+    await act(async () => approve.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const sent = JSON.parse(fetch.mock.calls.at(-1)[1].body);
+    expect(sent.operations.map(o => o.text)).toEqual(['first', 'third']);
+  });
+
+  it('refuses to apply when nothing is left ticked', async () => {
+    answers({ status: 200, body: PAYLOAD }, { status: 200, body: THREE });
+    await mount();
+    await type('x');
+    const boxes = [...container.querySelectorAll('.proposal .op-card input[type=checkbox]')];
+    for (const b of boxes) await act(async () => b.click());
+    expect(container.querySelectorAll('.proposal-actions button')[0].disabled).toBe(true);
+  });
+
+  it('says why a change is going to the manager rather than landing', async () => {
+    answers(
+      { status: 200, body: PAYLOAD },
+      { status: 200, body: { ...THREE, willQueue: true, queueReason: 'destructive' } },
+    );
+    await mount();
+    await type('x');
+    expect(container.textContent).toMatch(/removes or rewrites something already there/);
+  });
+
+  it('says when it is the project reviewing everything, not the change', async () => {
+    answers(
+      { status: 200, body: PAYLOAD },
+      { status: 200, body: { ...THREE, willQueue: true, queueReason: 'policy' } },
+    );
+    await mount();
+    await type('x');
+    expect(container.textContent).toMatch(/reviews every change before it lands/);
+  });
+});

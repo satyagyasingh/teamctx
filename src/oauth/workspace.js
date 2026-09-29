@@ -5,7 +5,7 @@ import { readPersonalKey, readProjectKeys, primaryManagerKey } from './ai-keys.j
 import { commitContext } from '../git.js';
 import { runWithActor } from '../actor.js';
 import { contributeCore } from '../../cli/commands/contribute.core.js';
-import { needsReview } from '../review-policy.js';
+import { needsReview, reviewPolicy } from '../review-policy.js';
 import { listAllWorkstreams, createWorkstream } from '../../cli/commands/workstream.core.js';
 import { listMembers } from '../../cli/commands/member.core.js';
 import { listPendingReviews, approveReview, rejectReview } from '../../cli/commands/review.core.js';
@@ -232,7 +232,7 @@ function scoped(allowed, workstream) {
  * no trust that contributing any other way would not.
  */
 export async function proposeContribution({ owner, repo, user, workstream, text }) {
-  return openProject({ owner, repo, user }, async ({ actor, isManager, allowed }) => runWithActor(actor, () => withProjectAi({ owner, repo, user, actor }, async () => {
+  return openProject({ owner, repo, user }, async ({ actor, isManager, allowed, config }) => runWithActor(actor, () => withProjectAi({ owner, repo, user, actor }, async () => {
     const target = scoped(allowed, workstream);
     let queues = false;
     const r = await contributeCore({
@@ -242,12 +242,18 @@ export async function proposeContribution({ owner, repo, user, workstream, text 
       // Nothing is written in this half. The person has not seen it yet.
       onProposed: async (p) => { queues = p.willQueue; return false; },
     });
+    const ops = r.operations || [];
     return {
       summary: r.summary,
-      operations: r.operations || [],
+      operations: ops,
       // What the button will do, decided by the project rather than guessed by
       // the browser: a manager lands it, anybody else sends it for review.
       willQueue: queues && !isManager,
+      // And why, because "this needs approval" invites the question every time.
+      // A project set to review everything is a different answer from a change
+      // that would remove something somebody else wrote.
+      queueReason: !queues ? null : (reviewPolicy(config) === 'all' ? 'policy' : 'destructive'),
+      policy: reviewPolicy(config),
       mode: r.mode,
     };
   })));
