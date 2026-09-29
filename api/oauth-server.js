@@ -1130,31 +1130,47 @@ const esc = (v) => String(v).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;'
 
 const shell = (title, body, { wide = false } = {}) => `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} — teamctx</title><style>
-:root{color-scheme:light dark;--accent:#2f6feb;--line:#8883;--dim:#888}
-@media(prefers-color-scheme:dark){:root{--accent:#6ea8fe}}
-body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1.25rem;line-height:1.55}
+<title>${esc(title)} — teamctx</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Hanken+Grotesk:wght@400;500;600&family=Spline+Sans+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* One product, one surface.
+   These are the workspace's own tokens, so somebody crossing from a project to
+   its settings does not arrive somewhere that looks like a different tool. The
+   class names are untouched: this is the same markup in the same clothes as the
+   rest of the app. */
+:root{
+  --paper:#f4efe6;--card:#fcfaf5;--ink:#1a1c1a;--soft:#5a625b;--faint:#8a9088;
+  --line:#e4dbcc;--accent:#1f6f5c;--accent-soft:#e6f0eb;--amber:#b5651d;--amber-soft:#f4e8da;
+  --dim:#8a9088;
+  --font-display:"Fraunces",Georgia,serif;
+  --font-body:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:"Spline Sans Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+body{font-family:var(--font-body);background:var(--paper);color:var(--ink);
+  max-width:34rem;margin:0 auto;padding:2.5rem 1.25rem 4rem;line-height:1.55}
 body.wide{max-width:60rem}
-h1{font-size:1.25rem;margin-bottom:.25rem}
-h2{font-size:1rem;margin:0 0 .3rem}
+h1{font-family:var(--font-display);font-weight:600;font-size:1.5rem;margin:0 0 .35rem}
+h2{font-family:var(--font-display);font-weight:500;font-size:1.05rem;margin:0 0 .3rem}
 /* Sections were three stacked h1s separated by rules, which reads as one long
    document rather than as things you can act on one at a time. */
-.card{border:1px solid var(--line);border-radius:.6rem;padding:1.15rem 1.3rem;margin:0 0 1.1rem;break-inside:avoid}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1.15rem 1.3rem;margin:0 0 1.1rem;break-inside:avoid}
 .cols{margin-top:1.25rem}
 @media(min-width:52rem){.cols{columns:2;column-gap:1.1rem}}
 .bar{display:flex;align-items:center;gap:1.1rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.7rem;margin-bottom:1.5rem;font-size:.9rem}
-.bar .brand{font-weight:600;color:inherit;text-decoration:none;margin-right:.4rem}
-.bar a{text-decoration:none;padding:.2rem 0;border-bottom:2px solid transparent}
+.bar .brand{font-family:var(--font-display);font-weight:600;color:inherit;text-decoration:none;margin-right:.4rem}
+.bar a{text-decoration:none;color:var(--soft);padding:.2rem 0;border-bottom:2px solid transparent}
 .bar a:hover{border-bottom-color:var(--line)}
 /* Saying which page you are on, rather than leaving every link identical. */
-.bar a.on{color:inherit;font-weight:600;border-bottom-color:var(--accent)}
+.bar a.on{color:var(--ink);font-weight:600;border-bottom-color:var(--accent)}
 /* Who you are belongs at the edge of the column, away from the things you do. */
-.bar .who{margin-left:auto;padding-left:1.1rem;border-left:1px solid var(--line)}
+.bar .who{margin-left:auto;padding-left:1.1rem;border-left:1px solid var(--line);color:var(--faint)}
 /* Three different things sat side by side looking identical: a link that goes
    somewhere, an action that makes something, and who you are. */
 /* A <button> inside an <a> is invalid, and browsers render the pair as one
    stretched control with whatever follows crowding it. */
-.btn{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:.6rem 1.4rem;border-radius:.4rem}
+.btn{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:.55rem 1.2rem;border-radius:8px;font-weight:500;font-size:.95rem}
 .btn:hover{filter:brightness(1.08)}
 /* A way in that is shut stays on the page, greyed, with the reason under it: a
    button that is simply absent reads as a bug, and leaves nothing to fix. */
@@ -1163,25 +1179,24 @@ h2{font-size:1rem;margin:0 0 .3rem}
 .bar h1{margin:0}
 .card label:first-of-type{margin-top:.75rem}
 .card button[type=submit]{margin-top:1rem}
-p{color:#666;margin-top:0}
-label{display:block;font-weight:500;margin:1.25rem 0 .35rem}
-input,select{width:100%;box-sizing:border-box;padding:.6rem .7rem;font-size:1rem;border:1px solid var(--line);border-radius:.4rem;background:Field;color:FieldText}
-/* The popup list is painted by the OS. A transparent select opted out of the
-   colour scheme, which rendered that list white-on-white. */
-option{background:Field;color:FieldText}
+p{color:var(--soft);margin-top:0}
+label{display:block;font-weight:500;margin:1.25rem 0 .35rem;color:var(--ink)}
+input,select{width:100%;box-sizing:border-box;padding:.55rem .7rem;font-size:1rem;font-family:inherit;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+/* The popup list is painted by the OS. A select with no colours of its own
+   opted out of the scheme, which rendered that list white-on-white. */
+option{background:var(--card);color:var(--ink)}
 input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
-button{margin-top:1.25rem;background:var(--accent);color:#fff;border:0;padding:.6rem 1.4rem;font-size:1rem;border-radius:.4rem;cursor:pointer}
+button{margin-top:1.25rem;background:var(--accent);color:#fff;border:0;padding:.55rem 1.2rem;font-size:.95rem;font-family:inherit;font-weight:500;border-radius:8px;cursor:pointer}
 button:hover{filter:brightness(1.08)}
 a{color:var(--accent)}
-.ok{background:#e8f5e9;color:#1b5e20;padding:.6rem .8rem;border-radius:.4rem;margin:1rem 0}
-.muted{font-size:.85rem;color:#888}
-.bad{background:#fdecea;color:#8b1a10;padding:.6rem .8rem;border-radius:.4rem;margin:1rem 0}
-@media(prefers-color-scheme:dark){.ok{background:#1b3a1e;color:#c8e6c9}.bad{background:#3a1b18;color:#f5c6c2}}
+.ok{background:var(--accent-soft);color:#14503f;padding:.6rem .8rem;border-radius:8px;margin:1rem 0}
+.muted{font-size:.85rem;color:var(--faint)}
+.bad{background:var(--amber-soft);color:#7a3d0c;padding:.6rem .8rem;border-radius:8px;margin:1rem 0}
 button.link{background:none;border:0;padding:0;margin:0;color:var(--dim);
   font-size:.85rem;text-decoration:underline;cursor:pointer}
-code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}
+code{font-family:var(--font-mono);font-size:.9em;background:#8881;padding:.1rem .3rem;border-radius:4px}
 table{width:100%;border-collapse:collapse;font-size:.95rem}
-th{text-align:left;font-weight:600;color:#888;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em}
+th{text-align:left;font-weight:600;color:var(--faint);font-size:.8rem;text-transform:uppercase;letter-spacing:.03em}
 th,td{padding:.4rem .5rem .4rem 0;border-bottom:1px solid var(--line);vertical-align:top}
 tr:last-child td{border-bottom:0}
 </style></head><body${wide ? ' class="wide"' : ''}>${body}</body></html>`;

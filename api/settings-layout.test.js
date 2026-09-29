@@ -62,10 +62,12 @@ describe('the settings page has a shape', () => {
   it('does not paint form controls out of the colour scheme', async () => {
     // A transparent select opted out, so the OS painted its popup list
     // white-on-white — options present, invisible, and only findable by the
-    // scrollbar next to them.
+    // scrollbar next to them. What matters is that the list is painted, not
+    // which colours it is painted with: this page used to follow the system
+    // scheme and now carries the workspace's own.
     const body = await settings();
     expect(body).not.toContain('background:transparent');
-    expect(body).toContain('option{background:Field');
+    expect(body).toMatch(/option\{background:[^;]+;color:[^}]+\}/);
   });
 
   it('packs the cards instead of leaving a hole under the short one', async () => {
