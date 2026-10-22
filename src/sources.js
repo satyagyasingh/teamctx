@@ -15,7 +15,6 @@
  */
 import { createHash } from 'crypto';
 import { readSourceRef, writeSourceRef } from './storage.js';
-import { pageLink } from './connectors/notion.js';
 
 /** The tools a reference can name, as the drawer shows them. */
 export const CONNECTORS = {
@@ -94,9 +93,7 @@ export function sourceId(connector, handle) {
 export function cleanRef(input) {
   if (!input || typeof input !== 'object') return null;
   const connector = connectorKey(input.connector);
-  // A Notion page has several links; it is kept, and known, by its own.
-  const cleaned = cleanLink(input.link);
-  const link = cleaned && pageLink(cleaned);
+  const link = cleanLink(input.link);
   const title = oneLine(input.title, TITLE_MAX);
   const itemId = oneLine(input.itemId, 200) || null;
   const summary = oneLine(input.summary, SUMMARY_MAX);
