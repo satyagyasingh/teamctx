@@ -126,6 +126,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pushed. An import sends one notice for the run. Only
   `https://hooks.slack.com/services/…` is accepted. A post that fails or takes
   over 3 seconds is logged and skipped.
+- **A manager can remove an accepted task (#202).** `teamctx task rm <id>
+  --reason "…"` and `task_rm` with `reason`. A manager only, and a reason is
+  required. The task leaves the plan, not the history: its outputs, approval and
+  logs stay, its acceptance record is closed, and anything else recorded when it
+  was accepted is listed for the manager to decide about. Reopening an accepted
+  task is still not possible; add a follow-on task.
 - **Connected sources are real (#168).** When something an assistant read in a
   connected tool (Slack, Notion, Google Drive, SharePoint, Dropbox, Coda) reaches
   the project, a reference to it is kept in `.teamctx/sources/`: the tool, a
