@@ -23,6 +23,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the raw error — including the session key — on the page. The person now sees a
   clean message (and, when a key is missing, a note to configure one); the
   detail goes to the server log.
+- **See when a linked cloud file changed after it was approved.** A link output now records the tool’s own version marker when it is attached; the new `task_check_links` later compares it with the file’s current version, and the project page shows “changed since approved”, “unchanged” or “can’t tell” on the task and in the review drawer. The check runs through the connector of whoever has access, so teamctx stores no new credential; a file with no recorded version, or one that cannot be read, is reported honestly, never guessed as unchanged.
+- **Attach a file as a task output.** `teamctx task attach <task> <path>` keeps a
+  deliverable — an image, a PDF, a spreadsheet — in the project’s repository as a
+  working output, up to 10 MB, reviewed like any other output. The type is checked
+  from the file’s bytes, not just its name; allowed: png, jpg, gif, webp, pdf, csv,
+  txt, md, json, docx, xlsx, pptx. A file over the limit or of another type is
+  refused, never trimmed.
+- **Link a cloud file as a task output.** When a deliverable already lives in
+  Google Drive, SharePoint, OneDrive or Dropbox, an assistant can attach it by
+  link with the `task_attach_link` tool instead of copying it in. teamctx stores
+  no credential: the link is normalised to one reference and stripped of any
+  access token, and a bare “anyone with the link” sharing URL is recorded by
+  name only. Submitting the task also records the file as a connected source.
+- **Attach and download files on the project page.** A signed-in member can
+  attach a file to a task from the page (up to 4 MB; the command line still
+  takes 10 MB), and anyone who can see the task can download its files. A file
+  downloads as an attachment with the type teamctx checked, and a file for a
+  task outside your scope is neither shown nor served.
 
 ## [0.5.3] - 2026-11-09
 

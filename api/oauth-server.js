@@ -6,6 +6,11 @@ import { providerFromEnv, oauthConfigStatus, GITHUB_SCOPES, OAuthCallbackError, 
 import { kvGet, kvSet, kvTake, kvDelete, keys, TTL, isPersistent, secretsConfigured } from '../src/oauth/kv.js';
 import { liveProjects } from '../src/oauth/live-projects.js';
 import { googleAuthorizeUrl, googleUserFromCode } from '../src/oauth/google.js';
+import { connectAuthorizeUrl, exchangeConnectCode } from '../src/oauth/connector-google.js';
+import {
+  writeConnection, removeConnection, connectionsFor, readConnection,
+  shareConnection, unshareConnection, connectorSharesBy,
+} from '../src/oauth/connectors.js';
 import { projectKeyDecision } from '../src/oauth/project-key-decision.js';
 import { managersOf } from '../src/managers.js';
 import { matchesActor, managerKeys } from '../src/review.js';
@@ -19,7 +24,9 @@ import { lendDecision } from '../src/oauth/lend-decision.js';
 import { GithubSession, listUserOrgs, createRepo, slugifyProjectName, suggestAvailableName, listPushableRepos, repoExistence } from '../src/adapters/github.js';
 import { runWithSession } from '../src/session-context.js';
 import { initProject } from '../cli/commands/init.core.js';
-import { readProjectView, readContributionsView, readRecordTrailView, ProjectViewError, StaleSignInError } from '../src/oauth/project-view.js';
+import { readProjectView, readContributionsView, readRecordTrailView, attachFileOutput, readFileOutput, ProjectViewError, StaleSignInError } from '../src/oauth/project-view.js';
+import { FileOutputError, MAX_PAGE_UPLOAD_BYTES, MAX_OUTPUT_FILE_BYTES, humanBytes } from '../src/file-output.js';
+import Busboy from 'busboy';
 import { TOOLS, callTool } from '../mcp/server.js';
 import { baseUrlFrom } from '../src/base-url.js';
 import { resolveKey } from '../src/numbering.js';
@@ -302,6 +309,29 @@ app.get('/oauth/google/callback', async (req, res) => {
   // Settings-page sign-in carries its own pending record, the same way the
   // GitHub callback tells the two flows apart. Same redirect URI as the connector
   // flow, so no second Google client has to be registered.
+  // Connecting a cloud account (e.g. Google Drive) reuses this same callback,
+  // told apart by its own pending record. Unlike sign-in, it keeps the token —
+  // encrypted, against the person's email — so a hosted file read can use it.
+  const connectPending = await kvTake(keys.pending(`connect-google:${state}`));
+  if (connectPending) {
+    if (error) return res.redirect(303, `/settings?error=${encodeURIComponent(`Google returned: ${error}`)}`);
+    if (!bindMatches(connectPending, readBindCookie(req))) {
+      return res.status(400).send(errorPage('This connection was started in another browser. Start it again from the settings page.'));
+    }
+    try {
+      const tokens = await exchangeConnectCode({
+        code: code ? String(code) : null,
+        clientId: provider.googleClientId,
+        clientSecret: provider.googleClientSecret,
+        redirectUri: provider.googleCallbackUrl,
+      });
+      await writeConnection({ email: connectPending.email, provider: connectPending.provider || 'gdrive', ...tokens });
+      return res.redirect(303, `/settings?connected=${encodeURIComponent(connectPending.provider || 'gdrive')}`);
+    } catch (e) {
+      return res.redirect(303, `/settings?error=${encodeURIComponent(e.message)}`);
+    }
+  }
+
   const settingsPending = await kvTake(keys.pending(`settings-google:${state}`));
   if (settingsPending) {
     if (error) return res.status(400).send(errorPage(`Google returned: ${error}`));
@@ -513,9 +543,23 @@ async function renderSettings(req, res, user, { newAgent = null } = {}) {
   ])].sort();
   const agents = await agentsFor(user);
   const slack = await slackFor(user, repos);
+  // A person's connected cloud accounts, with the account each was granted by.
+  // Reading the token record to label it is fine — it is the person's own.
+  const sharedConns = user.email ? await connectorSharesBy(user.email) : [];
+  const connectors = user.email
+    ? await Promise.all((await connectionsFor(user.email)).map(async p => ({
+        provider: p,
+        account: (await readConnection({ email: user.email, provider: p }))?.account || null,
+        // Which projects this connection is shared with — the person's own
+        // per-project choice, shown so they can take any of them back.
+        shares: sharedConns.filter(s => s.provider === p).map(s => s.slug).sort(),
+      })))
+    : [];
   if (newAgent) res.setHeader('Cache-Control', 'no-store');
   res.send(settingsPage({
-    user, hasKey: !!existing, shared, lent, repos, agents, newAgent, slack,
+    user, hasKey: !!existing, shared, lent, repos, agents, newAgent, slack, connectors,
+    connected: req.query.connected ? String(req.query.connected) : null,
+    disconnected: req.query.disconnected ? String(req.query.disconnected) : null,
     secretsMissing: isPersistent() && !secretsConfigured(),
     saved: req.query.saved === '1',
     rotated: req.query.rotated ? String(req.query.rotated).split(',').filter(Boolean) : [],
@@ -648,6 +692,76 @@ app.get('/settings/signin/google', async (req, res) => {
     redirectUri: provider.googleCallbackUrl,
     state,
   }));
+});
+
+/**
+ * Start connecting a cloud account (Google Drive) from the settings page. The
+ * grant is per person, global, and used across every project they are on; the
+ * callback is the shared Google one, so no second redirect URI is registered.
+ */
+app.get('/settings/connect/gdrive', async (req, res) => {
+  const user = await currentUser(req);
+  if (!user) return signInFor(res, '/settings');
+  if (!user.email) {
+    return res.redirect(303, `/settings?error=${encodeURIComponent('Connecting an account needs a verified email on your sign-in.')}`);
+  }
+  if (!provider?.googleClientId) {
+    return res.status(503).send(errorPage('Google is not configured on this deployment.'));
+  }
+  const state = randomBytes(18).toString('base64url');
+  const bind = randomBytes(18).toString('base64url');
+  await kvSet(
+    keys.pending(`connect-google:${state}`),
+    { kind: 'connect', provider: 'gdrive', email: user.email, bindHash: tokenHash(bind) },
+    { ttlSeconds: TTL.pending },
+  );
+  setBindCookie(res, bind);
+  res.redirect(connectAuthorizeUrl({
+    clientId: provider.googleClientId,
+    redirectUri: provider.googleCallbackUrl,
+    state,
+  }));
+});
+
+/** Disconnect a cloud account. Clears the stored token for this person. */
+app.post('/settings/disconnect', async (req, res) => {
+  const user = await currentUser(req);
+  if (!user) return signInFor(res, '/settings');
+  const prov = String(req.body?.provider || '');
+  if (user.email && prov) await removeConnection({ email: user.email, provider: prov });
+  res.redirect(303, `/settings?disconnected=${encodeURIComponent(prov)}`);
+});
+
+/** Share a connected cloud account with a project, as its fallback file reader. */
+app.post('/settings/connect/share', async (req, res) => {
+  const user = await currentUser(req);
+  if (!user) return res.redirect(303, '/settings');
+  if (!user.email) return backToSettings(res, 'Sharing a connection needs a verified email on your sign-in.');
+  const prov = String(req.body?.provider || '');
+  const ref = parseRepoRef(req.body?.project);
+  if (!prov) return backToSettings(res, 'Pick which connection to share.');
+  if (!ref) return backToSettings(res, 'Pick a project first.');
+  // Must actually hold the connection to share it.
+  if (!(await readConnection({ email: user.email, provider: prov }))) {
+    return backToSettings(res, 'Connect that account before sharing it.');
+  }
+  // The same gate as sharing an AI key with a project: you must be able to add to it.
+  const allowed = await mayAddProjectKey(user, ref);
+  if (!allowed.ok) return backToSettings(res, allowed.why);
+  await shareConnection({ owner: ref.owner, repo: ref.repo, email: user.email, provider: prov });
+  backToSettings(res);
+});
+
+/** Stop sharing a connected cloud account with a project. */
+app.post('/settings/connect/unshare', async (req, res) => {
+  const user = await currentUser(req);
+  if (!user) return res.redirect(303, '/settings');
+  const prov = String(req.body?.provider || '');
+  const ref = parseRepoRef(req.body?.project);
+  if (user.email && prov && ref) {
+    await unshareConnection({ owner: ref.owner, repo: ref.repo, email: user.email, provider: prov });
+  }
+  backToSettings(res);
 });
 
 /** Starts the GitHub login. Only reached by clicking Sign in. */
@@ -1566,6 +1680,111 @@ app.get('/project/:owner/:repo', async (req, res) => {
     const status = e.code === 'LEGACY_FORMAT' ? 409 : denied ? 403 : 500;
     res.status(status).send(errorPage(e.message, { user }));
   }
+});
+
+/**
+ * Read a single file off a multipart upload, into memory, with a hard size
+ * cap. busboy stops at the cap and marks the stream truncated rather than
+ * buffering an unbounded body; `title` and `note` ride along as fields. One
+ * file only — the page attaches one output at a time.
+ */
+function readUpload(req) {
+  return new Promise((resolve, reject) => {
+    let bb;
+    try {
+      bb = Busboy({ headers: req.headers, limits: { files: 1, fileSize: MAX_PAGE_UPLOAD_BYTES, fields: 10, fieldSize: 4000 } });
+    } catch (e) { reject(e); return; }
+    const fields = {};
+    let file = null;
+    let truncated = false;
+    bb.on('file', (_name, stream, info) => {
+      const chunks = [];
+      stream.on('data', (c) => chunks.push(c));
+      stream.on('limit', () => { truncated = true; });
+      stream.on('close', () => { file = { bytes: Buffer.concat(chunks), name: info?.filename || 'file' }; });
+    });
+    bb.on('field', (name, val) => { if (name === 'title' || name === 'note') fields[name] = val; });
+    bb.on('error', reject);
+    bb.on('close', () => resolve({ file, fields, truncated }));
+    req.pipe(bb);
+  });
+}
+
+/**
+ * Attach a file as a working output on a task, from the page (#247). A member
+ * uploads one file; it is size- and type-checked, stored in the repository and
+ * recorded like any other output. Large files and other types are refused with
+ * a message, never trimmed, and the command line takes a larger file.
+ */
+app.post('/project/:owner/:repo/task/:taskId/attach', async (req, res) => {
+  const user = await currentUser(req);
+  const owner = String(req.params.owner || '');
+  const repo = String(req.params.repo || '');
+  const taskId = String(req.params.taskId || '');
+  const back = `/project/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}?task=${encodeURIComponent(taskId)}`;
+  if (!user) return signInFor(res, back);
+
+  let parsed;
+  try {
+    parsed = await readUpload(req);
+  } catch {
+    return res.status(400).send(errorPage('That upload could not be read. Try choosing the file again.', { user }));
+  }
+  if (parsed.truncated) {
+    return res.status(413).send(errorPage(
+      `That file is larger than the ${humanBytes(MAX_PAGE_UPLOAD_BYTES)} the page takes. `
+      + `The command line takes up to ${humanBytes(MAX_OUTPUT_FILE_BYTES)}: teamctx task attach.`, { user }));
+  }
+  if (!parsed.file || !parsed.file.bytes.length) {
+    return res.status(400).send(errorPage('No file was chosen.', { user }));
+  }
+  try {
+    await attachFileOutput({
+      owner, repo, user, taskId,
+      bytes: parsed.file.bytes, fileName: parsed.file.name,
+      title: parsed.fields.title, note: parsed.fields.note,
+    });
+  } catch (e) {
+    if (await recoverStaleSignIn(req, res, e, { owner, repo })) return;
+    if (e instanceof FileOutputError) return res.status(400).send(errorPage(e.message, { user }));
+    const denied = e instanceof ProjectViewError || e.code === 'MEMBER_ACCESS_DENIED';
+    if (!denied) console.warn(`attach: ${owner}/${repo} task ${taskId} failed:`, e);
+    return res.status(denied ? 403 : 500).send(errorPage(
+      denied ? e.message : 'The file could not be saved. Try again.', { user }));
+  }
+  res.redirect(303, back);
+});
+
+/**
+ * Download a file output as an attachment (#247), with the type teamctx sniffed
+ * when it was attached and never inline, so a file never renders in the browser.
+ * The same scope gate as the page: an out-of-scope task serves nothing.
+ */
+app.get('/project/:owner/:repo/task/:taskId/file/:outputId', async (req, res) => {
+  const user = await currentUser(req);
+  const owner = String(req.params.owner || '');
+  const repo = String(req.params.repo || '');
+  const taskId = String(req.params.taskId || '');
+  const outputId = String(req.params.outputId || '');
+  if (!user) return signInFor(res, `/project/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
+  let file;
+  try {
+    file = await readFileOutput({ owner, repo, user, taskId, outputId });
+  } catch (e) {
+    if (await recoverStaleSignIn(req, res, e, { owner, repo })) return;
+    const denied = e instanceof ProjectViewError || e.code === 'MEMBER_ACCESS_DENIED';
+    if (!denied) console.warn(`download: ${owner}/${repo} task ${taskId} failed:`, e);
+    return res.status(denied ? 403 : 500).send(errorPage(
+      denied ? e.message : 'That file could not be read.', { user }));
+  }
+  if (!file) return res.status(404).send(errorPage('That file is not here, or not yours to see.', { user }));
+  // Attachment, never inline, with nosniff: a downloaded file is saved, not
+  // opened in the page, so an uploaded document can never run as one.
+  const safeName = String(file.name).replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_') || 'file';
+  res.setHeader('Content-Type', file.type);
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.send(file.bytes);
 });
 
 /**
