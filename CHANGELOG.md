@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every version oldest to newest with who changed it and when, who approved it,
   and the records it replaced or that replaced it. A record from before this
   reads as a single current version, never an error.
+- **Flag possible impact on other parts of the work when a record changes.** When
+  a change to a decision or rule is proposed, the same check that looks for
+  contradictions also looks at the records in sibling parts of the work and lists
+  any the change might affect — each with a one-line reason — for the manager to
+  confirm or dismiss at review. It is advice, never a block, and it respects
+  scope: a part of the work the reviewer cannot see never appears. Confirming one
+  is recorded and prompts a follow-up to reconcile that record; dismissing it is
+  recorded too. A one-part project is unaffected.
 
 ### Fixed
 - **A failed sign-in no longer shows the internal error.** A hosted deployment
